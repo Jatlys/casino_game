@@ -5,11 +5,11 @@
 
 
 ## Description
-A comprehensive casino card game application featuring multiple classic card games including Deck Casino (Kasino Kortipelli), Blackjack, and Baccarat. This project implements a full GUI application with AI opponents, betting systems, and game state persistence.
+A comprehensive casino card game application featuring multiple classic card games including Kasino Korttipeli, Blackjack, and Baccarat. This project implements a full GUI application with AI opponents, betting systems, and game state persistence.
 
 The application provides an interactive gaming experience with three main card games:
 
-- **Deck Casino (Kasino Kortipelli)**: A trick-taking card game where players capture cards from the table by matching ranks or building combinations
+- **Kasino Korttipeli**: A trick-taking card game where players capture cards from the table by matching ranks or building combinations
 - **Blackjack**: The classic card game where players aim to get as close to 21 as possible without going over
 - **Baccarat**: A comparing card game between the player's hand (Punto) and the banker's hand (Banco)
 
@@ -20,7 +20,6 @@ Key features include:
 - Game state saving and loading
 - Session statistics tracking
 - Multiple player support
-
 
 ## Visuals
 The application includes several views:
@@ -52,7 +51,7 @@ The application includes several views:
 5. Play the game following the on-screen instructions
 
 ### Game Rules
-- **Cassino**: Players take turns playing cards and capturing combinations from the table
+- **Kasino Korttipeli**: Players take turns playing cards and capturing combinations from the table
 - **Blackjack**: Hit, stand, double down, or split to beat the dealer
 - **Baccarat**: Bet on Punto, Banco, or Tie and watch the automated dealing
 

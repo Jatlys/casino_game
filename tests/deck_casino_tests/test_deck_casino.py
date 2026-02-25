@@ -1,5 +1,5 @@
 # Unit tests for Card, Deck, Hand, Player.
-# Run with: python -m unittest tests/deck_casino/test_deck_casino.py
+# Run with: python -m unittest tests/deck_casino_tests/test_deck_casino.py
 # Ref: project plan Section 7 (104083758_casino_project_plan.pdf)
 
 import unittest

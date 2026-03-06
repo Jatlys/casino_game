@@ -9,7 +9,7 @@ A comprehensive casino card game application featuring multiple classic card gam
 
 The application provides an interactive gaming experience with three main card games:
 
-- **Kasino Korttipeli**: A trick-taking card game where players capture cards from the table by matching ranks or building combinations
+- **Deck Casino (Kasino Korttipeli)**: A trick-taking card game where players capture cards from the table by matching ranks or building combinations
 - **Blackjack**: The classic card game where players aim to get as close to 21 as possible without going over
 - **Baccarat**: A comparing card game between the player's hand (Punto) and the banker's hand (Banco)
 
@@ -29,7 +29,7 @@ The application includes several views:
 
 ## Installation
 ### Prerequisites
-- Python 3.8 or higher
+- Python 3.10 or higher
 - PyQt6 for the GUI components
 
 ### Setup
@@ -51,7 +51,7 @@ The application includes several views:
 5. Play the game following the on-screen instructions
 
 ### Game Rules
-- **Kasino Korttipeli**: Players take turns playing cards and capturing combinations from the table
+- **Deck Casino (Kasino Korttipeli)**: Players take turns playing cards and capturing combinations from the table
 - **Blackjack**: Hit, stand, double down, or split to beat the dealer
 - **Baccarat**: Bet on Punto, Banco, or Tie and watch the automated dealing
 

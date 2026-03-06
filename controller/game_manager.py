@@ -30,6 +30,20 @@ class GameManager:
         """Register the player roster for the next game."""
         self._players = players
 
+    # Game launching
+
+    def start_deck_casino(self, players: list[Player] | None = None) -> None:
+        """Instantiate and start a DeckCasinoGame.
+
+        Uses provided players or falls back to the registered roster.
+        Stores the running game as active_game.
+        """
+        from model.deck_casino_game import DeckCasinoGame
+        roster = players if players is not None else self._players
+        game = DeckCasinoGame(roster)
+        game.start_game()
+        self._active_game = game
+
     # Dunder helpers
 
     def __repr__(self) -> str:

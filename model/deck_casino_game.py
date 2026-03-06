@@ -111,7 +111,7 @@ class DeckCasinoGame:
 
         # Each Ace collected
         for player in self._players:
-            aces = sum(1 for c in player.collection if c.rank == 1)
+            aces = sum(1 for c in player.collection if c.rank == "A")
             if aces:
                 player.add_score(aces)
 
@@ -130,13 +130,13 @@ class DeckCasinoGame:
 
         # Diamond-10 holder — 2 points
         for player in self._players:
-            if any(c.suit == "Diamonds" and c.rank == 10 for c in player.collection):
+            if any(c.suit == "Diamonds" and c.rank == "10" for c in player.collection):
                 player.add_score(2)
                 break
 
         # Spade-2 holder — 1 point
         for player in self._players:
-            if any(c.suit == "Spades" and c.rank == 2 for c in player.collection):
+            if any(c.suit == "Spades" and c.rank == "2" for c in player.collection):
                 player.add_score(1)
                 break
 

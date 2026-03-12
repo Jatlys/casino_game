@@ -3,7 +3,7 @@
 
 from PyQt6.QtWidgets import QWidget
 from PyQt6.QtGui import QPainter, QColor, QFont, QPen, QBrush
-from PyQt6.QtCore import Qt, QRect, QRectF
+from PyQt6.QtCore import Qt, QRect, QRectF, pyqtSignal
 
 from model.card import Card
 
@@ -30,11 +30,21 @@ class CardWidget(QWidget):
     card set,  face_down=True   → card back
     """
 
+    clicked = pyqtSignal()  # emitted when the user clicks the card
+
+    _hint_mode: bool = False  # class-level flag; shared by all instances
+
+    @classmethod
+    def set_hint_mode(cls, enabled: bool) -> None:
+        """Enable or disable the hand-value superscript badge on all cards."""
+        cls._hint_mode = enabled
+
     def __init__(self, card: Card | None = None, face_down: bool = False,
                  parent=None) -> None:
         super().__init__(parent)
         self._card = card
         self._face_down = face_down
+        self._selected = False
         self.setFixedSize(CARD_W, CARD_H)
 
     # Public interface
@@ -44,6 +54,16 @@ class CardWidget(QWidget):
         self._card = card
         self._face_down = face_down
         self.update()
+
+    def set_selected(self, selected: bool) -> None:
+        """Highlight the card as selected and trigger a repaint."""
+        self._selected = selected
+        self.update()
+
+    # Events
+
+    def mousePressEvent(self, event) -> None:
+        self.clicked.emit()
 
     # Paint event
 
@@ -59,6 +79,11 @@ class CardWidget(QWidget):
             self._draw_placeholder(painter, rect)
         else:
             self._draw_face(painter, rect)
+
+        if self._selected:
+            painter.setPen(QPen(QColor("#2196F3"), 3))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(QRectF(1, 1, CARD_W - 2, CARD_H - 2), 6, 6)
 
     # Drawing helpers
 
@@ -114,3 +139,33 @@ class CardWidget(QWidget):
             painter.setPen(QPen(QColor("#FFD700"), 2))
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRoundedRect(QRectF(2, 2, CARD_W - 4, CARD_H - 4), 5, 5)
+
+        # Hint-mode badge: hand_value() as a superscript in the top-right corner
+        if self._hint_mode and self._card is not None:
+            self._draw_hint_badge(painter, self._card)
+
+    def _draw_hint_badge(self, painter: QPainter, card: Card) -> None:
+        """Draw a small rounded badge showing hand_value() in the top-right."""
+        value = card.hand_value()
+        text  = str(value)
+
+        is_special = card.is_special()
+        bg_color   = QColor("#ffd700") if is_special else QColor("#1565c0")
+        fg_color   = QColor("#000000") if is_special else QColor("#ffffff")
+
+        badge_w = 18 if value >= 10 else 14
+        badge_h = 13
+        badge_x = CARD_W - badge_w - 3
+        badge_y = 3
+
+        painter.setBrush(QBrush(bg_color))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawRoundedRect(QRectF(badge_x, badge_y, badge_w, badge_h), 4, 4)
+
+        painter.setPen(QPen(fg_color))
+        painter.setFont(QFont("Arial", 7, QFont.Weight.Bold))
+        painter.drawText(
+            QRect(badge_x, badge_y, badge_w, badge_h),
+            Qt.AlignmentFlag.AlignCenter,
+            text,
+        )

@@ -1,4 +1,4 @@
-# Card rendering with QPainter — standard poker card proportions (1:1.4 ratio).
+# Card rendering with QPainter — standard poker card proportions (1:1.4 ratio). https://www.papersizeswiki.com/standard-playing-card-size/
 # Special card gold border follows project plan Section 6 special card rules.
 
 from PyQt6.QtWidgets import QWidget

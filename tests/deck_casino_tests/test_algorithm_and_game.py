@@ -192,6 +192,54 @@ class TestCasinoTakeAlgorithm(unittest.TestCase):
             )
         )
 
+    def test_get_valid_takes_returns_list(self):
+        result = CasinoTakeAlgorithm.get_valid_takes(Card("Hearts", "5"), [Card("Clubs", "5")])
+        self.assertIsInstance(result, list)
+
+    def test_get_valid_takes_results_are_frozensets(self):
+        takes = CasinoTakeAlgorithm.get_valid_takes(
+            Card("Hearts", "7"), [Card("Clubs", "7")]
+        )
+        for t in takes:
+            self.assertIsInstance(t, frozenset)
+
+    def test_spade_2_on_table_contributes_table_value_2(self):
+        """Spade-2 on the table is worth 2 (table_value), not 15 (hand_value)."""
+        played = Card("Hearts", "9")           # hand_value 9
+        table  = [Card("Spades", "2"),          # table_value 2
+                  Card("Clubs",  "7")]          # 2 + 7 = 9
+        takes = CasinoTakeAlgorithm.get_valid_takes(played, table)
+        self.assertIn(frozenset({Card("Spades", "2"), Card("Clubs", "7")}), takes)
+
+    def test_diamond_10_on_table_contributes_table_value_10(self):
+        """Diamond-10 on the table is worth 10 (table_value), not 16 (hand_value)."""
+        played = Card("Spades", "K")            # hand_value 13
+        table  = [Card("Diamonds", "10"),       # table_value 10
+                  Card("Hearts",   "3")]        # 10 + 3 = 13
+        takes = CasinoTakeAlgorithm.get_valid_takes(played, table)
+        self.assertIn(frozenset({Card("Diamonds", "10"), Card("Hearts", "3")}), takes)
+
+    def test_is_valid_take_partial_cover_is_false(self):
+        """A chosen set that cannot be fully partitioned into valid subsets is rejected."""
+        played = Card("Hearts", "7")
+        table  = [Card("Clubs", "7"), Card("Diamonds", "3"), Card("Spades", "4")]
+        # 7 alone is valid; 3 alone is not; choosing 7+3 leaves 3 uncovered
+        chosen = frozenset({Card("Clubs", "7"), Card("Diamonds", "3")})
+        self.assertFalse(CasinoTakeAlgorithm.is_valid_take(played, chosen, table))
+
+    def test_is_valid_take_three_non_overlapping_groups(self):
+        """Three non-overlapping groups all summing to 7 can be taken simultaneously."""
+        played = Card("Hearts", "7")
+        table  = [
+            Card("Clubs",    "7"),   # group 1: single 7
+            Card("Diamonds", "3"),   # group 2: 3 + 4 = 7
+            Card("Spades",   "4"),
+            Card("Hearts",   "2"),   # group 3: 2 + 5 = 7
+            Card("Clubs",    "5"),
+        ]
+        chosen = frozenset(table)
+        self.assertTrue(CasinoTakeAlgorithm.is_valid_take(played, chosen, table))
+
 
 class TestDeckCasinoGame(unittest.TestCase):
     """Tests for DeckCasinoGame setup, turns, sweep detection, and scoring."""
@@ -441,6 +489,168 @@ class TestDeckCasinoGame(unittest.TestCase):
         game, players = make_game()
         players[0].add_score(15)
         self.assertFalse(game.has_winner())
+
+    # start_game() — additional coverage
+
+    def test_start_game_four_players_stock_size(self):
+        """52 - 4 (table) - 4*4 (hands) = 32 remaining in stock."""
+        game, _ = make_game(("A", "B", "C", "D"))
+        self.assertEqual(len(game.deck), 32)
+
+    def test_start_game_no_card_appears_twice(self):
+        """Table + all player hands must be entirely unique cards."""
+        game, players = make_game(("Alice", "Bob"))
+        all_visible = game.table_cards + [c for p in players for c in p.hand.cards]
+        self.assertEqual(len(all_visible), len(set(all_visible)))
+
+    def test_start_game_resets_player_collections(self):
+        """start_game() calls reset_for_round() — collections must be empty."""
+        game, players = make_game()
+        players[0].add_to_collection(Card("Hearts", "7"))
+        game.start_game()
+        self.assertEqual(len(players[0].collection), 0)
+
+    # play_card() — turn advancement
+
+    def test_play_card_place_advances_turn(self):
+        game, players = make_game()
+        played = Card("Hearts", "3")
+        inject_state(game, players[0], [played], [Card("Clubs", "5")])
+        game.play_card(played)
+        self.assertIs(game.current_player, players[1])
+
+    def test_play_card_take_advances_turn(self):
+        game, players = make_game()
+        played = Card("Hearts", "7")
+        target = Card("Clubs", "7")
+        inject_state(game, players[0], [played], [target])
+        game.play_card(played, frozenset({target}))
+        self.assertIs(game.current_player, players[1])
+
+    def test_play_card_no_replenish_when_stock_empty(self):
+        """If the stock is empty, playing a card should not grow the hand."""
+        game, players = make_game()
+        played = Card("Hearts", "3")
+        inject_state(game, players[0], [played], [Card("Clubs", "5")])
+        game._deck._cards.clear()
+        game.play_card(played)
+        self.assertEqual(players[0].hand.card_count(), 0)
+
+    def test_play_card_multi_group_take_removes_all_chosen_from_table(self):
+        """A multi-group take must remove every chosen card from the table."""
+        game, players = make_game()
+        played = Card("Hearts", "7")   # hand_value 7
+        group_cards = [
+            Card("Clubs",    "7"),     # group 1: 7
+            Card("Diamonds", "3"),     # group 2: 3+4
+            Card("Spades",   "4"),
+        ]
+        inject_state(game, players[0], [played], group_cards)
+        game.play_card(played, frozenset(group_cards))
+        for c in group_cards:
+            self.assertNotIn(c, game.table_cards)
+
+    # advance_turn()
+
+    def test_advance_turn_wraps_back_to_first_player(self):
+        game, players = make_game()
+        game.advance_turn()
+        game.advance_turn()
+        self.assertIs(game.current_player, players[0])
+
+    # is_round_over()
+
+    def test_is_round_over_true_when_stock_and_all_hands_empty(self):
+        game, players = make_game()
+        game._deck._cards.clear()
+        for p in players:
+            for c in list(p.hand.cards):
+                p.hand.remove_card(c)
+        self.assertTrue(game.is_round_over())
+
+    def test_is_round_over_false_when_stock_empty_but_hands_not(self):
+        game, _ = make_game()
+        game._deck._cards.clear()
+        self.assertFalse(game.is_round_over())
+
+    # end_round()
+
+    def test_end_round_no_last_taker_leaves_table_uncollected(self):
+        """If no take occurred this round, no player should receive the table cards."""
+        game, players = make_game()
+        leftover = Card("Diamonds", "9")
+        game._table_cards = [leftover]
+        game._last_taker = None
+        game._deck._cards.clear()
+        for p in players:
+            for c in list(p.hand.cards):
+                p.hand.remove_card(c)
+        game.end_round()
+        all_collected = [c for p in players for c in p.collection]
+        self.assertNotIn(leftover, all_collected)
+
+    # has_winner()
+
+    def test_has_winner_true_when_score_exceeds_16(self):
+        game, players = make_game()
+        players[0].add_score(20)
+        self.assertTrue(game.has_winner())
+
+    def test_no_winner_when_all_players_at_zero(self):
+        game, _ = make_game()
+        self.assertFalse(game.has_winner())
+
+    # calculate_scores() — edge cases
+
+    def test_calculate_scores_empty_collections_no_change(self):
+        """With no cards collected, every scoring category awards 0 points."""
+        game, players = make_game()
+        before = [p.total_score for p in players]
+        game.calculate_scores()
+        for i, p in enumerate(players):
+            self.assertEqual(p.total_score, before[i])
+
+    def test_calculate_scores_most_spades_tie_no_bonus(self):
+        """Tied Spade count means neither player receives the 2-point bonus."""
+        game, players = make_game()
+        players[0].add_to_collection([Card("Spades", "3")])
+        players[1].add_to_collection([Card("Spades", "4")])
+        before = [p.total_score for p in players]
+        game.calculate_scores()
+        gained = [players[i].total_score - before[i] for i in range(2)]
+        # Spade bonus (2 pts) must not appear in either player's gain
+        self.assertNotIn(2, gained)
+
+    def test_calculate_scores_both_special_bonuses_in_same_collection(self):
+        """Player holding both Diamond-10 and Spade-2 earns 2+1 = 3 bonus points."""
+        game, players = make_game()
+        players[0].add_to_collection([Card("Diamonds", "10"), Card("Spades", "2")])
+        players[1].add_to_collection([Card("Hearts", "2"), Card("Clubs", "3"),
+                                      Card("Hearts", "4")])
+        score_before = players[0].total_score
+        game.calculate_scores()
+        self.assertGreaterEqual(players[0].total_score - score_before, 3)
+
+    # Properties — defensive copies
+
+    def test_table_cards_property_returns_copy(self):
+        """Clearing the returned list must not affect the internal table."""
+        game, _ = make_game()
+        count_before = len(game.table_cards)
+        game.table_cards.clear()
+        self.assertEqual(len(game.table_cards), count_before)
+
+    def test_players_property_returns_copy(self):
+        """Clearing the returned list must not affect the internal player roster."""
+        game, _ = make_game()
+        game.players.clear()
+        self.assertEqual(len(game.players), 2)
+
+    def test_repr_contains_player_names_and_key_info(self):
+        game, _ = make_game(("Alice", "Bob"))
+        r = repr(game)
+        self.assertIn("Alice", r)
+        self.assertIn("Bob", r)
 
 
 if __name__ == "__main__":

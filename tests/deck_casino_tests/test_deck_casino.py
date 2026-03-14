@@ -114,6 +114,50 @@ class TestCard(unittest.TestCase):
         with self.assertRaises(ValueError):
             Card("Hearts", "1")
 
+    def test_repr_format(self):
+        self.assertEqual(repr(Card("Spades", "K")), "Card('Spades', 'K')")
+
+    def test_card_not_equal_to_non_card(self):
+        """__eq__ returns NotImplemented when compared to a non-Card object."""
+        result = Card("Hearts", "7").__eq__("Hearts 7")
+        self.assertIs(result, NotImplemented)
+
+    def test_card_equal_to_itself(self):
+        c = Card("Hearts", "7")
+        self.assertEqual(c, c)
+
+    def test_spades_10_is_not_special_and_has_normal_values(self):
+        """10 of Spades has value 10/10 — only Diamond-10 is the special 10."""
+        card = Card("Spades", "10")
+        self.assertFalse(card.is_special())
+        self.assertEqual(card.hand_value(), 10)
+        self.assertEqual(card.table_value(), 10)
+
+    def test_clubs_2_is_not_special_and_has_normal_values(self):
+        """2 of Clubs has value 2/2 — only Spade-2 is the special 2."""
+        card = Card("Clubs", "2")
+        self.assertFalse(card.is_special())
+        self.assertEqual(card.hand_value(), 2)
+        self.assertEqual(card.table_value(), 2)
+
+    def test_king_hand_and_table_value_both_13(self):
+        card = Card("Hearts", "K")
+        self.assertEqual(card.hand_value(), 13)
+        self.assertEqual(card.table_value(), 13)
+
+    def test_special_cards_hand_table_differ(self):
+        """All three special cards must have hand_value != table_value."""
+        specials = [
+            (Card("Hearts",   "A"),   14, 1),
+            (Card("Diamonds", "10"), 16, 10),
+            (Card("Spades",   "2"),  15, 2),
+        ]
+        for card, expected_hand, expected_table in specials:
+            with self.subTest(card=card):
+                self.assertEqual(card.hand_value(),  expected_hand)
+                self.assertEqual(card.table_value(), expected_table)
+                self.assertNotEqual(card.hand_value(), card.table_value())
+
 
 class TestDeck(unittest.TestCase):
     """Tests for Deck initialisation, deal(), shuffle(), and is_empty()."""
@@ -193,6 +237,44 @@ class TestDeck(unittest.TestCase):
     def test_len_matches_cards_list(self):
         deck = Deck()
         self.assertEqual(len(deck), len(deck.cards))
+
+    def test_deal_negative_raises(self):
+        with self.assertRaises(ValueError):
+            Deck().deal(-1)
+
+    def test_deck_has_each_suit_13_times(self):
+        """Every suit must appear exactly 13 times in a fresh deck."""
+        cards = Deck().cards
+        for suit in ["Hearts", "Diamonds", "Clubs", "Spades"]:
+            with self.subTest(suit=suit):
+                self.assertEqual(sum(1 for c in cards if c.suit == suit), 13)
+
+    def test_deck_has_each_rank_4_times(self):
+        """Every rank must appear exactly 4 times (once per suit)."""
+        from model.card import RANKS
+        cards = Deck().cards
+        for rank in RANKS:
+            with self.subTest(rank=rank):
+                self.assertEqual(sum(1 for c in cards if c.rank == rank), 4)
+
+    def test_stock_property_is_alias_for_cards(self):
+        """deck.stock and deck.cards must return the same content."""
+        deck = Deck()
+        self.assertEqual(deck.stock, deck.cards)
+
+    def test_deal_exactly_remaining_succeeds(self):
+        """Dealing exactly the remaining cards should empty the deck without error."""
+        deck = Deck()
+        deck.deal(50)
+        result = deck.deal(2)
+        self.assertEqual(len(result), 2)
+        self.assertTrue(deck.is_empty())
+
+    def test_cards_property_returns_copy(self):
+        """Mutating the returned list must not shrink the internal deck."""
+        deck = Deck()
+        deck.cards.clear()
+        self.assertEqual(len(deck), 52)
 
 
 class TestHand(unittest.TestCase):
@@ -281,6 +363,31 @@ class TestHand(unittest.TestCase):
         hand = Hand()
         hand.add_card(Card("Hearts", "A"))
         self.assertIn("A of Hearts", str(hand))
+
+    def test_is_empty_after_all_cards_removed(self):
+        hand = Hand()
+        cards = [Card("Hearts", "5"), Card("Clubs", "9")]
+        for c in cards:
+            hand.add_card(c)
+        for c in cards:
+            hand.remove_card(c)
+        self.assertTrue(hand.is_empty())
+
+    def test_str_multiple_cards_contains_all(self):
+        hand = Hand()
+        hand.add_card(Card("Hearts", "A"))
+        hand.add_card(Card("Clubs",  "K"))
+        s = str(hand)
+        self.assertIn("A of Hearts", s)
+        self.assertIn("K of Clubs", s)
+
+    def test_get_value_all_three_special_cards(self):
+        """Ace(14) + Diamond-10(16) + Spade-2(15) = 45."""
+        hand = Hand()
+        hand.add_card(Card("Hearts",   "A"))
+        hand.add_card(Card("Diamonds", "10"))
+        hand.add_card(Card("Spades",   "2"))
+        self.assertEqual(hand.get_value(), 45)
 
 
 class TestPlayer(unittest.TestCase):
@@ -371,6 +478,31 @@ class TestPlayer(unittest.TestCase):
         p.add_score(7)
         p.reset_for_round()
         self.assertEqual(p.total_score, 7)
+
+    def test_hand_is_empty_initially(self):
+        self.assertTrue(Player("Alice").hand.is_empty())
+
+    def test_add_zero_score_does_not_change_total(self):
+        p = Player("Alice")
+        p.add_score(0)
+        self.assertEqual(p.total_score, 0)
+
+    def test_add_to_collection_empty_list_no_change(self):
+        p = Player("Alice")
+        p.add_to_collection([])
+        self.assertEqual(len(p.collection), 0)
+
+    def test_score_accumulates_across_multiple_add_score_calls(self):
+        p = Player("Alice")
+        for pts in [1, 2, 3, 4]:
+            p.add_score(pts)
+        self.assertEqual(p.total_score, 10)
+
+    def test_reset_does_not_affect_name_or_is_ai(self):
+        p = Player("Bot", is_ai=True)
+        p.reset_for_round()
+        self.assertEqual(p.name, "Bot")
+        self.assertTrue(p.is_ai)
 
 
 if __name__ == "__main__":

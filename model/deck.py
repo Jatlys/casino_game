@@ -20,12 +20,12 @@ class Deck:
 
     @property
     def cards(self) -> list[Card]:
-        return self._cards
+        return list(self._cards)
 
     @property
     def stock(self) -> list[Card]:
         """Alias used when referring to the stock pile in game logic."""
-        return self._cards
+        return list(self._cards)
 
     # Operations
 

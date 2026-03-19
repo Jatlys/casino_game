@@ -59,6 +59,36 @@ class CasinoTakeAlgorithm:
         return CasinoTakeAlgorithm._can_cover(frozenset(chosen_cards), valid_subsets)
 
     @staticmethod
+    def explain_invalid_take(played_card, chosen_cards: frozenset, table_cards: list) -> str:
+        """Return a human-readable reason why chosen_cards is not a valid take."""
+        target = played_card.hand_value()
+
+        if not chosen_cards.issubset(set(table_cards)):
+            missing = chosen_cards - set(table_cards)
+            missing_str = ", ".join(str(c) for c in missing)
+            return f"{missing_str} {'is' if len(missing) == 1 else 'are'} not on the table."
+
+        all_valid = CasinoTakeAlgorithm.get_valid_takes(played_card, table_cards)
+        if not all_valid:
+            return (
+                f"{played_card} has a value of {target}, but no combination "
+                f"of table cards sums to {target}."
+            )
+
+        chosen_sum = sum(c.table_value() for c in chosen_cards)
+        if chosen_sum != target and len(chosen_cards) == 1:
+            card = next(iter(chosen_cards))
+            return (
+                f"{card} has a table value of {card.table_value()}, "
+                f"but {played_card} requires a sum of {target}."
+            )
+
+        return (
+            f"The selected cards (sum = {chosen_sum}) cannot be split into "
+            f"valid groups that each sum to {target} (the value of {played_card})."
+        )
+
+    @staticmethod
     def _can_cover(remaining: frozenset, valid_subsets: list[frozenset]) -> bool:
         """Recursively check if remaining cards can be partitioned into valid subsets."""
         if not remaining:

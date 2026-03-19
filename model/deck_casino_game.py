@@ -61,7 +61,8 @@ class DeckCasinoGame:
 
         if take is not None:
             if not CasinoTakeAlgorithm.is_valid_take(card, take, self._table_cards):
-                raise ValueError(f"Invalid take: {take} with played card {card}.")
+                reason = CasinoTakeAlgorithm.explain_invalid_take(card, take, self._table_cards)
+                raise ValueError(reason)
 
         player.hand.remove_card(card)
 

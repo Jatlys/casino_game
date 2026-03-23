@@ -59,11 +59,14 @@ class DeckCasinoGame:
         if card not in player.hand.cards:
             raise ValueError(f"{card} is not in {player.name}'s hand.")
 
+        if take is not None:
+            if not CasinoTakeAlgorithm.is_valid_take(card, take, self._table_cards):
+                reason = CasinoTakeAlgorithm.explain_invalid_take(card, take, self._table_cards)
+                raise ValueError(reason)
+
         player.hand.remove_card(card)
 
         if take is not None:
-            if not CasinoTakeAlgorithm.is_valid_take(card, take, self._table_cards):
-                raise ValueError(f"Invalid take: {take} with played card {card}.")
             for taken_card in take:
                 self._table_cards.remove(taken_card)
             player.add_to_collection([card] + list(take))

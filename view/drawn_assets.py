@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
     QLabel, QPushButton, QDialog, QGraphicsOpacityEffect,
 )
 from PyQt6.QtGui import (
-    QPainter, QColor, QFont, QPen, QBrush, QPixmap, QIcon,
+    QPainter, QColor, QFont, QFontMetrics, QPen, QBrush, QPixmap, QIcon,
     QLinearGradient, QRadialGradient,
     QPainterPath,
 )
@@ -466,25 +466,29 @@ class _ScoreRow(QWidget):
         p.setFont(QFont("Arial", 10, QFont.Weight.Bold))
         p.drawText(QRect(44, 0, w // 2, h), Qt.AlignmentFlag.AlignVCenter, self._player.name)
 
-        # Score
-        pts_text = f"{self._player.total_score} pts"
-        p.setFont(QFont("Arial", 10, QFont.Weight.Bold))
-        p.drawText(
-            QRect(w // 2, 0, w // 2 - 10, h),
-            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
-            pts_text,
-        )
-
-        # Sweep stars (if any)
+        # Sweep stars (if any) — drawn first so we can measure their width
+        star_reserve = 0
         if self._player.sweeps:
+            star_font = QFont("Arial", 7)
             star_text = "★" * min(self._player.sweeps, 5)
+            star_reserve = QFontMetrics(star_font).horizontalAdvance(star_text) + 6
             p.setPen(QPen(QColor("#ffd700")))
-            p.setFont(QFont("Arial", 7))
+            p.setFont(star_font)
             p.drawText(
                 QRect(0, 0, w - 8, h),
                 Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
                 star_text,
             )
+
+        # Score — right-aligned, leaving room for sweep stars
+        pts_text = f"{self._player.total_score} pts"
+        p.setPen(QPen(text_color))
+        p.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+        p.drawText(
+            QRect(w // 2, 0, w // 2 - 10 - star_reserve, h),
+            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
+            pts_text,
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

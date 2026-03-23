@@ -204,11 +204,44 @@ class DeckCasinoView(QWidget):
 
     # Private rebuild helpers
 
+    @staticmethod
+    def _pending_points(player, all_players: list) -> int:
+        """Projected points this player will earn at round end from current collection."""
+        pts = 0
+        pts += player.sweeps
+        pts += sum(1 for c in player.collection if c.rank == "A")
+
+        # Most cards (tie = no point)
+        max_cards = max(len(p.collection) for p in all_players)
+        if (len(player.collection) == max_cards and
+                sum(1 for p in all_players if len(p.collection) == max_cards) == 1):
+            pts += 1
+
+        # Most spades (tie = no point) — 2 points
+        spade_counts = {p: sum(1 for c in p.collection if c.suit == "Spades")
+                        for p in all_players}
+        max_sp = max(spade_counts.values())
+        if (spade_counts[player] == max_sp and
+                sum(1 for p in all_players if spade_counts[p] == max_sp) == 1):
+            pts += 2
+
+        # Diamond-10 holder — 2 points
+        if any(c.suit == "Diamonds" and c.rank == "10" for c in player.collection):
+            pts += 2
+
+        # Spade-2 holder — 1 point
+        if any(c.suit == "Spades" and c.rank == "2" for c in player.collection):
+            pts += 1
+
+        return pts
+
     def _rebuild_scores(self, players, stock_count: int) -> None:
         self._clear_layout(self._scores_layout)
         current = players[self._current_game._turn_index] if self._current_game else None
         for player in players:
-            badge = PlayerBadgeWidget(player, is_current=(player is current))
+            pending = self._pending_points(player, players)
+            badge = PlayerBadgeWidget(player, is_current=(player is current),
+                                      pending_pts=pending)
             self._scores_layout.addWidget(badge)
         self._scores_layout.addStretch()
         stock_lbl = QLabel(f"Stock: {stock_count}")

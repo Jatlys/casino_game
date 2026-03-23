@@ -3,7 +3,7 @@
 # AI players additionally show a "⚙ CPU" label and a coloured difficulty pill.
 
 from PyQt6.QtWidgets import QWidget, QSizePolicy
-from PyQt6.QtGui import QPainter, QColor, QFont, QPen, QBrush
+from PyQt6.QtGui import QPainter, QColor, QFont, QFontMetrics, QPen, QBrush
 from PyQt6.QtCore import Qt, QRect, QRectF
 
 from model.player import Player
@@ -38,16 +38,18 @@ class PlayerBadgeWidget(QWidget):
     """QPainter-drawn badge representing one player in the score row.
 
     Layout (left → right):
-      [padding] [⚙ CPU] [name: X pts  (Y sweeps)] ... [EASY|MED|HARD] [padding]
+      [padding] [⚙ CPU] [name: X pts +N] ... [EASY|MED|HARD] [padding]
       The CPU badge and difficulty pill are only drawn for AI players.
       The current player's badge has a brighter background.
+      pending_pts shows projected points to be awarded at round end.
     """
 
     def __init__(self, player: Player, is_current: bool = False,
-                 parent=None) -> None:
+                 pending_pts: int = 0, parent=None) -> None:
         super().__init__(parent)
         self._player = player
         self._is_current = is_current
+        self._pending_pts = pending_pts
         self.setFixedHeight(_BADGE_H)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.setMinimumWidth(self._compute_min_width())
@@ -92,13 +94,27 @@ class PlayerBadgeWidget(QWidget):
         sweep_str = f"  ({sweeps} sweep{'s' if sweeps != 1 else ''})" if sweeps else ""
         text = f"{self._player.name}: {self._player.total_score} pts{sweep_str}"
         text_color = QColor("#ffd700") if self._is_current else QColor("#ffffff")
+        score_font = QFont("Arial", 9, QFont.Weight.Bold)
         painter.setPen(QPen(text_color))
-        painter.setFont(QFont("Arial", 9, QFont.Weight.Bold))
+        painter.setFont(score_font)
         painter.drawText(
             QRect(x, 0, right - x, h),
             Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
             text,
         )
+
+        # Pending points to be awarded at round end — drawn right after the score
+        if self._pending_pts > 0:
+            fm = QFontMetrics(score_font)
+            text_w = fm.horizontalAdvance(text)
+            pending_str = f" +{self._pending_pts}"
+            painter.setPen(QPen(QColor("#80c880")))
+            painter.setFont(QFont("Arial", 8))
+            painter.drawText(
+                QRect(x + text_w, 0, right - x - text_w, h),
+                Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+                pending_str,
+            )
 
         # Difficulty pill (AI only)
         if self._player.is_ai:

@@ -8,8 +8,10 @@ from PyQt6.QtGui import QPainter, QColor, QFont, QPen, QBrush
 from PyQt6.QtCore import Qt, QRectF, pyqtSignal
 
 from view.card_widget import CardWidget, CARD_H
+from view.player_badge_widget import PlayerBadgeWidget
 from view.game_instructions.deck_casino import DeckCasinoInstructionsDialog
 from view.deck_casino_tutorial import TutorialOverlay
+from view.drawn_assets import SweepFlashOverlay, PointToastOverlay
 
 
 class TableZoneWidget(QWidget):
@@ -58,6 +60,8 @@ class DeckCasinoView(QWidget):
         self._table_card_widgets: list[tuple] = []  # (Card, CardWidget)
         self._hand_card_widgets:  list[tuple] = []  # (Card, CardWidget)
         self._tutorial_overlay = TutorialOverlay(self)
+        self._sweep_flash = SweepFlashOverlay(self)
+        self._point_toast = PointToastOverlay(self)
         self._current_game = None
         self._init_ui()
 
@@ -178,6 +182,20 @@ class DeckCasinoView(QWidget):
         if self._current_game is not None:
             self.refresh(self._current_game)
 
+    @property
+    def is_hint_mode(self) -> bool:
+        """True when hint mode is currently active."""
+        return self._hint_btn.isChecked()
+
+    def show_sweep_flash(self, player_name: str = "", hint_text: str = "") -> None:
+        """Trigger the sweep flash overlay for the given player."""
+        self._sweep_flash.flash(player_name, hint_text)
+
+    def show_point_toast(self, title: str, subtitle: str = "",
+                         accent: str = "#ffd700") -> None:
+        """Show a brief capture-event toast banner."""
+        self._point_toast.show_event(title, subtitle, accent)
+
     def start_tutorial(self) -> None:
         """Show the step-by-step tutorial overlay above the action buttons."""
         self._tutorial_overlay._step = 0
@@ -186,17 +204,58 @@ class DeckCasinoView(QWidget):
 
     # Private rebuild helpers
 
+    @staticmethod
+    def _pending_points(player, all_players: list) -> int:
+        """Projected points this player will earn at round end from current collection."""
+        pts = 0
+        pts += player.sweeps
+        pts += sum(1 for c in player.collection if c.rank == "A")
+
+        # Most cards (tie = no point)
+        max_cards = max(len(p.collection) for p in all_players)
+        if (len(player.collection) == max_cards and
+                sum(1 for p in all_players if len(p.collection) == max_cards) == 1):
+            pts += 1
+
+        # Most spades (tie = no point) — 2 points
+        spade_counts = {p: sum(1 for c in p.collection if c.suit == "Spades")
+                        for p in all_players}
+        max_sp = max(spade_counts.values())
+        if (spade_counts[player] == max_sp and
+                sum(1 for p in all_players if spade_counts[p] == max_sp) == 1):
+            pts += 2
+
+        # Diamond-10 holder — 2 points
+        if any(c.suit == "Diamonds" and c.rank == "10" for c in player.collection):
+            pts += 2
+
+        # Spade-2 holder — 1 point
+        if any(c.suit == "Spades" and c.rank == "2" for c in player.collection):
+            pts += 1
+
+        return pts
+
     def _rebuild_scores(self, players, stock_count: int) -> None:
         self._clear_layout(self._scores_layout)
+        current = players[self._current_game._turn_index] if self._current_game else None
+
+        # Build badges, then equalise their widths
+        badges = []
         for player in players:
-            text = f"{player.name}: {player.total_score} pts  ({player.sweeps} sweeps)"
-            lbl = QLabel(text)
-            lbl.setStyleSheet(
-                "color: #ffffff; font-weight: bold; background: #1b5e20; "
-                "border-radius: 4px; padding: 2px 8px;"
-            )
-            self._scores_layout.addWidget(lbl)
-        self._scores_layout.addStretch()
+            pending = self._pending_points(player, players)
+            badge = PlayerBadgeWidget(player, is_current=(player is current),
+                                      pending_pts=pending)
+            badges.append(badge)
+
+        max_w = max(b.minimumWidth() for b in badges)
+        for b in badges:
+            b.setFixedWidth(max_w)
+
+        # Centre the badges; Stock label pinned to the right
+        self._scores_layout.addStretch(1)
+        for b in badges:
+            self._scores_layout.addWidget(b)
+        self._scores_layout.addStretch(1)
         stock_lbl = QLabel(f"Stock: {stock_count}")
         stock_lbl.setStyleSheet("color: #aaaaaa;")
         self._scores_layout.addWidget(stock_lbl)

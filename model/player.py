@@ -9,9 +9,10 @@ class Player:
     cumulative score across rounds.
     """
 
-    def __init__(self, name: str, is_ai: bool = False) -> None:
+    def __init__(self, name: str, is_ai: bool = False, difficulty: str = "hard") -> None:
         self._name = name
         self._is_ai = is_ai
+        self._difficulty = difficulty  # "easy" | "medium" | "hard" (AI only)
         self._total_score = 0
         self._sweeps = 0
         self.hand: Hand = Hand(owner=name)
@@ -26,6 +27,10 @@ class Player:
     @property
     def is_ai(self) -> bool:
         return self._is_ai
+
+    @property
+    def difficulty(self) -> str:
+        return self._difficulty
 
     @property
     def total_score(self) -> int:
@@ -73,4 +78,4 @@ class Player:
         return f"{self._name} | Score: {self._total_score}"
 
     def __repr__(self) -> str:
-        return f"Player(name='{self._name}', is_ai={self._is_ai})"
+        return f"Player(name='{self._name}', is_ai={self._is_ai}, difficulty='{self._difficulty}')"

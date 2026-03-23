@@ -6,58 +6,243 @@ import sys
 from PyQt6.QtWidgets import (
     QMainWindow, QApplication, QWidget,
     QHBoxLayout, QVBoxLayout,
-    QStackedWidget, QLabel, QPushButton,
-    QDialog, QDialogButtonBox, QFormLayout, QLineEdit, QMessageBox,
+    QStackedWidget, QLabel, QPushButton, QButtonGroup, QRadioButton,
+    QDialog, QDialogButtonBox, QFormLayout, QLineEdit, QMessageBox, QFrame,
 )
 from PyQt6.QtGui import QFont
 
 from controller.game_manager import GameManager
 from model.player import Player
+from model.ai_opponent import AIOpponent
 from view.lobby_view import LobbyView
 from view.deck_casino_view import DeckCasinoView
 
 
 class PlayerSetupDialog(QDialog):
-    """Modal dialog for entering player names before a Deck Casino game.
+    """Two-step player setup dialog.
 
-    Requires at least 2 names; supports up to 4 players.
+    Step 1 — Mode selection:
+        • Player vs Player  →  choose 2/3/4 players + names
+        • Player vs Computer  →  enter your name + choose AI difficulty
+
+    get_players() returns a ready-to-use list[Player].
     """
+
+    _DIFFICULTY_DESCRIPTIONS = {
+        "easy":   "Plays random legal moves — great for beginners.",
+        "medium": "Uses basic strategy: sweeps and maximises cards taken.",
+        "hard":   "Optimal play: captures prize cards and avoids easy sweeps.",
+    }
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Player Setup")
-        self.setFixedWidth(320)
+        self.setFixedWidth(380)
         self._init_ui()
 
+    # ------------------------------------------------------------------
+    # UI construction
+    # ------------------------------------------------------------------
+
     def _init_ui(self) -> None:
-        layout = QVBoxLayout(self)
+        root = QVBoxLayout(self)
+        root.setSpacing(12)
 
-        layout.addWidget(QLabel("Enter player names (2–4 players):"))
+        # ── Mode selection ──────────────────────────────────────────
+        mode_label = QLabel("Game Mode:")
+        mode_label.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+        root.addWidget(mode_label)
 
-        self._name_edits: list[QLineEdit] = []
-        form = QFormLayout()
-        for i in range(4):
-            edit = QLineEdit()
-            edit.setPlaceholderText(f"Player {i + 1}")
-            form.addRow(f"Player {i + 1}:", edit)
-            self._name_edits.append(edit)
+        self._pvp_radio = QRadioButton("Player vs Player")
+        self._pvc_radio = QRadioButton("Player vs Computer")
+        self._pvp_radio.setChecked(True)
 
-        # Pre-fill two default names so the dialog is ready immediately
-        self._name_edits[0].setText("Player 1")
-        self._name_edits[1].setText("Player 2")
+        self._mode_group = QButtonGroup(self)
+        self._mode_group.addButton(self._pvp_radio)
+        self._mode_group.addButton(self._pvc_radio)
 
-        layout.addLayout(form)
+        root.addWidget(self._pvp_radio)
+        root.addWidget(self._pvc_radio)
 
+        # Divider
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setFrameShadow(QFrame.Shadow.Sunken)
+        root.addWidget(line)
+
+        # ── Stacked content area ────────────────────────────────────
+        self._stack = QStackedWidget()
+        self._stack.addWidget(self._build_pvp_page())   # index 0
+        self._stack.addWidget(self._build_pvc_page())   # index 1
+        root.addWidget(self._stack)
+
+        # ── OK / Cancel ─────────────────────────────────────────────
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok |
             QDialogButtonBox.StandardButton.Cancel
         )
-        buttons.accepted.connect(self.accept)
+        buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+        root.addWidget(buttons)
 
-    def get_player_names(self) -> list[str]:
-        return [e.text().strip() for e in self._name_edits if e.text().strip()]
+        # Connect mode radios → switch stack page
+        self._pvp_radio.toggled.connect(
+            lambda checked: self._stack.setCurrentIndex(0) if checked else None
+        )
+        self._pvc_radio.toggled.connect(
+            lambda checked: self._stack.setCurrentIndex(1) if checked else None
+        )
+
+    def _build_pvp_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        # Number of players
+        count_label = QLabel("Number of players:")
+        count_label.setFont(QFont("Arial", 9, QFont.Weight.Bold))
+        layout.addWidget(count_label)
+
+        count_row = QHBoxLayout()
+        self._count_group = QButtonGroup(self)
+        self._count_radios: list[QRadioButton] = []
+        for n in (2, 3, 4):
+            rb = QRadioButton(str(n))
+            if n == 2:
+                rb.setChecked(True)
+            self._count_group.addButton(rb, n)
+            count_row.addWidget(rb)
+            self._count_radios.append(rb)
+        count_row.addStretch()
+        layout.addLayout(count_row)
+
+        # Name fields
+        layout.addSpacing(4)
+        self._pvp_name_edits: list[QLineEdit] = []
+        self._pvp_form = QFormLayout()
+        defaults = ["Player 1", "Player 2", "", ""]
+        for i in range(4):
+            edit = QLineEdit()
+            edit.setText(defaults[i])
+            edit.setPlaceholderText(f"Player {i + 1}")
+            self._pvp_form.addRow(f"Player {i + 1}:", edit)
+            self._pvp_name_edits.append(edit)
+        layout.addLayout(self._pvp_form)
+
+        # Wire count radios → show/hide extra fields
+        self._count_group.idToggled.connect(self._update_pvp_fields)
+        self._update_pvp_fields()
+
+        return page
+
+    def _build_pvc_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        # Human name
+        form = QFormLayout()
+        self._human_name_edit = QLineEdit("Player 1")
+        form.addRow("Your name:", self._human_name_edit)
+        layout.addLayout(form)
+
+        layout.addSpacing(4)
+
+        # Difficulty
+        diff_label = QLabel("AI Difficulty:")
+        diff_label.setFont(QFont("Arial", 9, QFont.Weight.Bold))
+        layout.addWidget(diff_label)
+
+        self._diff_group = QButtonGroup(self)
+        self._diff_radios: dict[str, QRadioButton] = {}
+        for key, label in (("easy", "Easy"), ("medium", "Medium"), ("hard", "Hard")):
+            rb = QRadioButton(label)
+            if key == "medium":
+                rb.setChecked(True)
+            self._diff_group.addButton(rb)
+            self._diff_radios[key] = rb
+            layout.addWidget(rb)
+
+        # Description label — updates when difficulty changes
+        self._diff_desc = QLabel(self._DIFFICULTY_DESCRIPTIONS["medium"])
+        self._diff_desc.setWordWrap(True)
+        self._diff_desc.setStyleSheet("color: #555555; font-style: italic;")
+        layout.addWidget(self._diff_desc)
+
+        for key, rb in self._diff_radios.items():
+            rb.toggled.connect(
+                lambda checked, k=key: self._diff_desc.setText(
+                    self._DIFFICULTY_DESCRIPTIONS[k]
+                ) if checked else None
+            )
+
+        return page
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _update_pvp_fields(self) -> None:
+        """Show name fields 1..N, hide the rest."""
+        n = self._count_group.checkedId()
+        for i, edit in enumerate(self._pvp_name_edits):
+            visible = i < n
+            # Show/hide both the label and field via the form row
+            label_item = self._pvp_form.itemAt(i * 2)
+            field_item = self._pvp_form.itemAt(i * 2 + 1)
+            if label_item and label_item.widget():
+                label_item.widget().setVisible(visible)
+            if field_item and field_item.widget():
+                field_item.widget().setVisible(visible)
+
+    def _selected_difficulty(self) -> str:
+        for key, rb in self._diff_radios.items():
+            if rb.isChecked():
+                return key
+        return "medium"
+
+    def _on_accept(self) -> None:
+        if self._pvp_radio.isChecked():
+            names = [
+                e.text().strip()
+                for e in self._pvp_name_edits
+                if e.isVisible() and e.text().strip()
+            ]
+            if len(names) < 2:
+                QMessageBox.warning(
+                    self, "Not enough players",
+                    "Please enter at least 2 player names."
+                )
+                return
+        else:
+            name = self._human_name_edit.text().strip()
+            if not name:
+                QMessageBox.warning(self, "Name required", "Please enter your name.")
+                return
+        self.accept()
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def get_players(self) -> list[Player]:
+        """Return a Player list ready to pass to DeckCasinoGame."""
+        if self._pvp_radio.isChecked():
+            names = [
+                e.text().strip()
+                for e in self._pvp_name_edits
+                if e.isVisible() and e.text().strip()
+            ]
+            return [Player(n) for n in names]
+        else:
+            human = self._human_name_edit.text().strip() or "Player 1"
+            diff  = self._selected_difficulty()
+            return [
+                Player(human),
+                Player("Computer", is_ai=True, difficulty=diff),
+            ]
 
 
 class TutorialModeDialog(QDialog):
@@ -210,24 +395,17 @@ class MainWindow(QMainWindow):
         # Blackjack and Baccarat handled in Week 5/6
 
     def _launch_deck_casino(self) -> None:
-        # Step 1: player names
+        # Step 1: mode + player setup
         dialog = PlayerSetupDialog(self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
 
-        names = dialog.get_player_names()
-        if len(names) < 2:
-            QMessageBox.warning(
-                self, "Not enough players",
-                "Please enter at least 2 player names."
-            )
-            return
+        players = dialog.get_players()
 
         # Step 2: tutorial mode prompt
         tutorial_dialog = TutorialModeDialog(self)
         tutorial_mode = tutorial_dialog.exec() == QDialog.DialogCode.Accepted
 
-        players = [Player(name) for name in names]
         self._game_manager.start_deck_casino(players)
 
         self._deck_casino_view.refresh(self._game_manager.active_game)
@@ -254,6 +432,12 @@ class MainWindow(QMainWindow):
 
     def _after_deck_casino_action(self) -> None:
         game = self._game_manager.active_game
+
+        # Auto-play all consecutive AI turns before handing back to the human
+        while not game.is_round_over() and game.current_player.is_ai:
+            ai = game.current_player
+            card, take = AIOpponent.decide_action(game, ai.difficulty)
+            game.play_card(card, take)
 
         if game.is_round_over():
             game.end_round()

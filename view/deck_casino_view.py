@@ -11,7 +11,7 @@ from view.card_widget import CardWidget, CARD_H
 from view.player_badge_widget import PlayerBadgeWidget
 from view.game_instructions.deck_casino import DeckCasinoInstructionsDialog
 from view.deck_casino_tutorial import TutorialOverlay
-from view.drawn_assets import SweepFlashOverlay
+from view.drawn_assets import SweepFlashOverlay, PointToastOverlay
 
 
 class TableZoneWidget(QWidget):
@@ -61,6 +61,7 @@ class DeckCasinoView(QWidget):
         self._hand_card_widgets:  list[tuple] = []  # (Card, CardWidget)
         self._tutorial_overlay = TutorialOverlay(self)
         self._sweep_flash = SweepFlashOverlay(self)
+        self._point_toast = PointToastOverlay(self)
         self._current_game = None
         self._init_ui()
 
@@ -181,9 +182,19 @@ class DeckCasinoView(QWidget):
         if self._current_game is not None:
             self.refresh(self._current_game)
 
-    def show_sweep_flash(self, player_name: str = "") -> None:
+    @property
+    def is_hint_mode(self) -> bool:
+        """True when hint mode is currently active."""
+        return self._hint_btn.isChecked()
+
+    def show_sweep_flash(self, player_name: str = "", hint_text: str = "") -> None:
         """Trigger the sweep flash overlay for the given player."""
-        self._sweep_flash.flash(player_name)
+        self._sweep_flash.flash(player_name, hint_text)
+
+    def show_point_toast(self, title: str, subtitle: str = "",
+                         accent: str = "#ffd700") -> None:
+        """Show a brief capture-event toast banner."""
+        self._point_toast.show_event(title, subtitle, accent)
 
     def start_tutorial(self) -> None:
         """Show the step-by-step tutorial overlay above the action buttons."""

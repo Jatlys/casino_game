@@ -220,6 +220,7 @@ class SweepFlashOverlay(QWidget):
         self.hide()
 
         self._player_name = ""
+        self._hint_text = ""
 
         self._effect = QGraphicsOpacityEffect(self)
         self.setGraphicsEffect(self._effect)
@@ -235,9 +236,15 @@ class SweepFlashOverlay(QWidget):
 
     # Public API
 
-    def flash(self, player_name: str = "") -> None:
-        """Show the flash for the given player name."""
+    def flash(self, player_name: str = "", hint_text: str = "") -> None:
+        """Show the flash for the given player name.
+
+        Args:
+            player_name: Name of the player who made the sweep.
+            hint_text:   Optional explanation shown below the name (hint mode).
+        """
         self._player_name = player_name
+        self._hint_text = hint_text
         self._fit_to_parent()
         self.show()
         self.raise_()
@@ -249,7 +256,7 @@ class SweepFlashOverlay(QWidget):
         self._anim.setEndValue(0.9)
         self._anim.start()
 
-        self._hold_timer.start(1200)
+        self._hold_timer.start(1600 if hint_text else 1200)
 
     # Internal
 
@@ -302,6 +309,16 @@ class SweepFlashOverlay(QWidget):
                 QRect(0, h // 2, w, h // 6),
                 Qt.AlignmentFlag.AlignCenter,
                 self._player_name,
+            )
+
+        # Hint explanation (hint mode only)
+        if self._hint_text:
+            p.setPen(QPen(QColor("#ffe680")))
+            p.setFont(QFont("Arial", max(9, w // 32)))
+            p.drawText(
+                QRect(w // 8, h * 2 // 3, w * 3 // 4, h // 5),
+                Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap,
+                self._hint_text,
             )
 
 
@@ -467,4 +484,127 @@ class _ScoreRow(QWidget):
                 QRect(0, 0, w - 8, h),
                 Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
                 star_text,
+            )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 6.  Point toast overlay  — compact non-blocking banner for notable captures
+# ─────────────────────────────────────────────────────────────────────────────
+
+class PointToastOverlay(QWidget):
+    """Small animated banner that announces a notable card capture.
+
+    Appears near the top of the parent widget, fades out automatically.
+    Mouse-transparent so it never blocks interaction.
+
+    Usage::
+
+        self._point_toast = PointToastOverlay(parent=self)
+
+        # … when a notable capture occurs:
+        self._point_toast.show_event(
+            title="Alice captured an Ace (+1 pt)",
+            subtitle="Each Ace earns 1 point at round end.",   # hint mode only
+            accent="#4caf50",
+        )
+    """
+
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.hide()
+
+        self._title    = ""
+        self._subtitle = ""
+        self._accent   = QColor("#ffd700")
+
+        self._effect = QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(self._effect)
+        self._effect.setOpacity(0.0)
+
+        self._anim = QPropertyAnimation(self._effect, b"opacity", self)
+        self._anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+        self._anim.finished.connect(self._on_anim_finished)
+
+        self._hold_timer = QTimer(self)
+        self._hold_timer.setSingleShot(True)
+        self._hold_timer.timeout.connect(self._start_fade_out)
+
+    # Public API
+
+    def show_event(self, title: str, subtitle: str = "",
+                   accent: str = "#ffd700") -> None:
+        """Show the toast with a title line and optional hint subtitle."""
+        self._title    = title
+        self._subtitle = subtitle
+        self._accent   = QColor(accent)
+        self._fit_to_parent()
+        self.update()
+        self.show()
+        self.raise_()
+
+        self._anim.stop()
+        self._anim.setDuration(180)
+        self._anim.setStartValue(0.0)
+        self._anim.setEndValue(1.0)
+        self._anim.start()
+
+        hold = 2800 if subtitle else 1800
+        self._hold_timer.start(hold)
+
+    # Internal
+
+    def _start_fade_out(self) -> None:
+        self._anim.stop()
+        self._anim.setDuration(500)
+        self._anim.setStartValue(self._effect.opacity())
+        self._anim.setEndValue(0.0)
+        self._anim.start()
+
+    def _on_anim_finished(self) -> None:
+        if self._effect.opacity() == 0.0:
+            self.hide()
+
+    def _fit_to_parent(self) -> None:
+        if self.parent():
+            par = self.parent()
+            height = 64 if self._subtitle else 40
+            width  = min(par.width() - 40, 500)
+            x      = (par.width() - width) // 2
+            y      = 72
+            self.setGeometry(x, y, width, height)
+
+    def resizeEvent(self, _event) -> None:
+        self._fit_to_parent()
+
+    def paintEvent(self, _event) -> None:
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        w, h = self.width(), self.height()
+
+        # Dark semi-transparent background
+        p.setBrush(QBrush(QColor(10, 25, 10, 220)))
+        p.setPen(QPen(self._accent, 2))
+        p.drawRoundedRect(QRectF(1, 1, w - 2, h - 2), 8, 8)
+
+        # Left accent stripe
+        p.setBrush(QBrush(self._accent))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawRoundedRect(QRectF(1, 1, 5, h - 2), 8, 8)
+
+        # Title line
+        p.setPen(QPen(self._accent))
+        p.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+        title_rect = QRect(14, 4, w - 18, 28)
+        p.drawText(title_rect, Qt.AlignmentFlag.AlignVCenter, self._title)
+
+        # Hint subtitle
+        if self._subtitle:
+            p.setPen(QPen(QColor("#bbbbbb")))
+            p.setFont(QFont("Arial", 8))
+            hint_rect = QRect(14, 30, w - 18, 30)
+            p.drawText(
+                hint_rect,
+                Qt.AlignmentFlag.AlignVCenter | Qt.TextFlag.TextWordWrap,
+                self._subtitle,
             )

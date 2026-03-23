@@ -238,12 +238,24 @@ class DeckCasinoView(QWidget):
     def _rebuild_scores(self, players, stock_count: int) -> None:
         self._clear_layout(self._scores_layout)
         current = players[self._current_game._turn_index] if self._current_game else None
+
+        # Build badges, then equalise their widths
+        badges = []
         for player in players:
             pending = self._pending_points(player, players)
             badge = PlayerBadgeWidget(player, is_current=(player is current),
                                       pending_pts=pending)
-            self._scores_layout.addWidget(badge)
-        self._scores_layout.addStretch()
+            badges.append(badge)
+
+        max_w = max(b.minimumWidth() for b in badges)
+        for b in badges:
+            b.setFixedWidth(max_w)
+
+        # Centre the badges; Stock label pinned to the right
+        self._scores_layout.addStretch(1)
+        for b in badges:
+            self._scores_layout.addWidget(b)
+        self._scores_layout.addStretch(1)
         stock_lbl = QLabel(f"Stock: {stock_count}")
         stock_lbl.setStyleSheet("color: #aaaaaa;")
         self._scores_layout.addWidget(stock_lbl)

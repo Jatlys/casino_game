@@ -14,6 +14,7 @@ from PyQt6.QtGui import QFont, QIcon
 from controller.game_manager import GameManager
 from model.player import Player
 from model.ai_opponent import AIOpponent
+from model.file_manager import FileManager
 from view.lobby_view import LobbyView
 from view.deck_casino_view import DeckCasinoView
 from view.drawn_assets import make_window_icon, RoundResultOverlay
@@ -329,6 +330,7 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self._game_manager = GameManager()
+        self._move_history: list[dict] = []
         self._init_ui()
 
     def _init_ui(self) -> None:
@@ -397,14 +399,31 @@ class MainWindow(QMainWindow):
         # Blackjack and Baccarat handled in Week 5/6
 
     def _launch_deck_casino(self) -> None:
-        # Step 1: mode + player setup
+        # Step 1: offer to resume a saved game if one exists
+        saved = FileManager.load()
+        if saved is not None:
+            reply = QMessageBox.question(
+                self, "Resume Saved Game",
+                "A saved game was found. Resume where you left off?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                game, self._move_history = saved
+                self._game_manager._active_game = game
+                self._deck_casino_view.refresh(game)
+                self.switch_view(self.DECK_CASINO)
+                self.update_sidebar(game.current_player)
+                return
+
+        # Step 2: mode + player setup
         dialog = PlayerSetupDialog(self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
 
         players = dialog.get_players()
+        self._move_history = []
 
-        # Step 2: tutorial mode prompt
+        # Step 3: tutorial mode prompt
         tutorial_dialog = TutorialModeDialog(self)
         tutorial_mode = tutorial_dialog.exec() == QDialog.DialogCode.Accepted
 
@@ -419,32 +438,103 @@ class MainWindow(QMainWindow):
 
     # Deck Casino actions
 
+    # ── Capture-event helpers ─────────────────────────────────────────────────
+
+    def _show_capture_events(self, player, card, take, sweeps_before: dict) -> None:
+        """Detect notable captures and show the appropriate overlays."""
+        hint = self._deck_casino_view.is_hint_mode
+        taken = (frozenset(take) | {card}) if take else frozenset()
+
+        # Sweep
+        if player.sweeps > sweeps_before.get(player, 0):
+            hint_text = (
+                "Capturing all table cards at once earns 1 sweep point, "
+                "awarded at the end of the round."
+            ) if hint else ""
+            self._deck_casino_view.show_sweep_flash(player.name, hint_text)
+
+        if not taken:
+            return
+
+        # Aces, Diamond-10, Spade-2
+        aces   = [c for c in taken if c.rank == "A"]
+        has_d10 = any(c.suit == "Diamonds" and c.rank == "10" for c in taken)
+        has_s2  = any(c.suit == "Spades"   and c.rank == "2"  for c in taken)
+
+        events = []
+        hints  = []
+
+        if aces:
+            n = len(aces)
+            pts = n
+            events.append(f"{'an Ace' if n == 1 else f'{n} Aces'} (+{pts} pt{'s' if pts > 1 else ''})")
+            if hint:
+                hints.append("Each Ace collected earns 1 point at round end.")
+
+        if has_d10:
+            events.append("the 10\u2666 (+2 pts)")
+            if hint:
+                hints.append("The 10 of Diamonds earns 2 points for its holder at round end.")
+
+        if has_s2:
+            events.append("the 2\u2660 (+1 pt)")
+            if hint:
+                hints.append("The 2 of Spades earns 1 point for its holder at round end.")
+
+        if not events:
+            return
+
+        accent   = "#ff9800" if player.is_ai else "#4caf50"
+        title    = f"{player.name} captured {', '.join(events)}"
+        subtitle = "  \u2022  ".join(hints) if hints else ""
+        self._deck_casino_view.show_point_toast(title, subtitle, accent)
+
+    # ── Deck Casino action handlers ───────────────────────────────────────────
+
     def _on_deck_casino_take(self, card, take: frozenset) -> None:
         game = self._game_manager.active_game
+        player = game.current_player
+        player_name = player.name
+        table_before = game.table_cards
         sweeps_before = {p: p.sweeps for p in game.players}
         try:
             game.play_card(card, take)
         except ValueError as e:
             QMessageBox.warning(self, "Invalid Take", str(e))
             return
-        for p in game.players:
-            if p.sweeps > sweeps_before[p]:
-                self._deck_casino_view.show_sweep_flash(p.name)
-                break
+        self._move_history.append(
+            FileManager.record_move(player_name, card, take, table_before)
+        )
+        self._show_capture_events(player, card, take, sweeps_before)
         self._after_deck_casino_action()
 
     def _on_deck_casino_place(self, card) -> None:
-        self._game_manager.active_game.play_card(card, None)
+        game = self._game_manager.active_game
+        player_name = game.current_player.name
+        table_before = game.table_cards
+        game.play_card(card, None)
+        self._move_history.append(
+            FileManager.record_move(player_name, card, None, table_before)
+        )
         self._after_deck_casino_action()
 
     def _after_deck_casino_action(self) -> None:
         game = self._game_manager.active_game
 
-        # Auto-play all consecutive AI turns before handing back to the human
-        while not game.is_round_over() and game.current_player.is_ai:
-            ai = game.current_player
-            card, take = AIOpponent.decide_action(game, ai.difficulty)
-            game.play_card(card, take)
+        # Auto-play all consecutive AI turns before handing back to the human.
+        # Also skip over any human player whose hand is empty (deck already
+        # exhausted), so the AI can finish playing its remaining cards.
+        while not game.is_round_over():
+            cp = game.current_player
+            if cp.is_ai:
+                card, take = AIOpponent.decide_action(game, cp.difficulty)
+                sweeps_before = {p: p.sweeps for p in game.players}
+                game.play_card(card, take)
+                self._show_capture_events(cp, card, take, sweeps_before)
+            elif cp.hand.is_empty():
+                game.advance_turn()
+            else:
+                break
 
         if game.is_round_over():
             game.end_round()
@@ -460,6 +550,7 @@ class MainWindow(QMainWindow):
 
         self._deck_casino_view.refresh(game)
         self.update_sidebar(game.current_player)
+        FileManager.save(game, self._move_history)
 
 
 if __name__ == "__main__":

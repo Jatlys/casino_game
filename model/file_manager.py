@@ -21,6 +21,7 @@ class FileManager:
         {
           "name": str,
           "is_ai": bool,
+          "difficulty": str,
           "total_score": int,
           "sweeps": int,
           "hand":       [ {"suit": ..., "rank": ...}, ... ],
@@ -61,6 +62,7 @@ class FileManager:
                 {
                     "name": p.name,
                     "is_ai": p.is_ai,
+                    "difficulty": p.difficulty,
                     "total_score": p.total_score,
                     "sweeps": p.sweeps,
                     "hand": [FileManager._card_to_dict(c) for c in p.hand.cards],
@@ -105,7 +107,8 @@ class FileManager:
         # Rebuild players with full state
         players: list[Player] = []
         for pd in data["players"]:
-            p = Player(pd["name"], is_ai=pd["is_ai"])
+            p = Player(pd["name"], is_ai=pd["is_ai"],
+                       difficulty=pd.get("difficulty", "hard"))
             p._total_score = pd["total_score"]
             p._sweeps = pd["sweeps"]
             for cd in pd["hand"]:

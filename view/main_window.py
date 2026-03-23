@@ -9,13 +9,14 @@ from PyQt6.QtWidgets import (
     QStackedWidget, QLabel, QPushButton, QButtonGroup, QRadioButton,
     QDialog, QDialogButtonBox, QFormLayout, QLineEdit, QMessageBox, QFrame,
 )
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QIcon
 
 from controller.game_manager import GameManager
 from model.player import Player
 from model.ai_opponent import AIOpponent
 from view.lobby_view import LobbyView
 from view.deck_casino_view import DeckCasinoView
+from view.drawn_assets import make_window_icon, RoundResultOverlay
 
 
 class PlayerSetupDialog(QDialog):
@@ -208,7 +209,7 @@ class PlayerSetupDialog(QDialog):
             names = [
                 e.text().strip()
                 for e in self._pvp_name_edits
-                if e.isVisible() and e.text().strip()
+                if e.text().strip()
             ]
             if len(names) < 2:
                 QMessageBox.warning(
@@ -233,7 +234,7 @@ class PlayerSetupDialog(QDialog):
             names = [
                 e.text().strip()
                 for e in self._pvp_name_edits
-                if e.isVisible() and e.text().strip()
+                if e.text().strip()
             ]
             return [Player(n) for n in names]
         else:
@@ -332,6 +333,7 @@ class MainWindow(QMainWindow):
 
     def _init_ui(self) -> None:
         self.setWindowTitle("Casino Card Game Suite")
+        self.setWindowIcon(QIcon(make_window_icon()))
         self.setGeometry(100, 100, 1000, 700)
 
         central = QWidget()
@@ -419,11 +421,16 @@ class MainWindow(QMainWindow):
 
     def _on_deck_casino_take(self, card, take: frozenset) -> None:
         game = self._game_manager.active_game
+        sweeps_before = {p: p.sweeps for p in game.players}
         try:
             game.play_card(card, take)
         except ValueError as e:
             QMessageBox.warning(self, "Invalid Take", str(e))
             return
+        for p in game.players:
+            if p.sweeps > sweeps_before[p]:
+                self._deck_casino_view.show_sweep_flash(p.name)
+                break
         self._after_deck_casino_action()
 
     def _on_deck_casino_place(self, card) -> None:
@@ -442,24 +449,13 @@ class MainWindow(QMainWindow):
         if game.is_round_over():
             game.end_round()
 
-            scores = "\n".join(
-                f"  {p.name}: {p.total_score} pts" for p in game.players
-            )
+            is_game_over = game.has_winner()
+            RoundResultOverlay(game.players, is_game_over=is_game_over, parent=self).exec()
 
-            if game.has_winner():
-                winner = max(game.players, key=lambda p: p.total_score)
-                QMessageBox.information(
-                    self, "Game Over",
-                    f"{winner.name} wins with {winner.total_score} points!\n\n"
-                    f"Final scores:\n{scores}"
-                )
+            if is_game_over:
                 self.switch_view(self.LOBBY)
                 return
 
-            QMessageBox.information(
-                self, "Round Over",
-                f"Round complete! Starting a new round.\n\nScores:\n{scores}"
-            )
             game.start_game()
 
         self._deck_casino_view.refresh(game)

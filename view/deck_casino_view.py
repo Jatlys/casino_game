@@ -8,8 +8,10 @@ from PyQt6.QtGui import QPainter, QColor, QFont, QPen, QBrush
 from PyQt6.QtCore import Qt, QRectF, pyqtSignal
 
 from view.card_widget import CardWidget, CARD_H
+from view.player_badge_widget import PlayerBadgeWidget
 from view.game_instructions.deck_casino import DeckCasinoInstructionsDialog
 from view.deck_casino_tutorial import TutorialOverlay
+from view.drawn_assets import SweepFlashOverlay
 
 
 class TableZoneWidget(QWidget):
@@ -58,6 +60,7 @@ class DeckCasinoView(QWidget):
         self._table_card_widgets: list[tuple] = []  # (Card, CardWidget)
         self._hand_card_widgets:  list[tuple] = []  # (Card, CardWidget)
         self._tutorial_overlay = TutorialOverlay(self)
+        self._sweep_flash = SweepFlashOverlay(self)
         self._current_game = None
         self._init_ui()
 
@@ -178,6 +181,10 @@ class DeckCasinoView(QWidget):
         if self._current_game is not None:
             self.refresh(self._current_game)
 
+    def show_sweep_flash(self, player_name: str = "") -> None:
+        """Trigger the sweep flash overlay for the given player."""
+        self._sweep_flash.flash(player_name)
+
     def start_tutorial(self) -> None:
         """Show the step-by-step tutorial overlay above the action buttons."""
         self._tutorial_overlay._step = 0
@@ -188,14 +195,10 @@ class DeckCasinoView(QWidget):
 
     def _rebuild_scores(self, players, stock_count: int) -> None:
         self._clear_layout(self._scores_layout)
+        current = players[self._current_game._turn_index] if self._current_game else None
         for player in players:
-            text = f"{player.name}: {player.total_score} pts  ({player.sweeps} sweeps)"
-            lbl = QLabel(text)
-            lbl.setStyleSheet(
-                "color: #ffffff; font-weight: bold; background: #1b5e20; "
-                "border-radius: 4px; padding: 2px 8px;"
-            )
-            self._scores_layout.addWidget(lbl)
+            badge = PlayerBadgeWidget(player, is_current=(player is current))
+            self._scores_layout.addWidget(badge)
         self._scores_layout.addStretch()
         stock_lbl = QLabel(f"Stock: {stock_count}")
         stock_lbl.setStyleSheet("color: #aaaaaa;")

@@ -1,0 +1,238 @@
+{
+  "turn_index": 0,
+  "table_cards": [
+    {
+      "suit": "Spades",
+      "rank": "9"
+    },
+    {
+      "suit": "Clubs",
+      "rank": "6"
+    },
+    {
+      "suit": "Spades",
+      "rank": "6"
+    },
+    {
+      "suit": "Clubs",
+      "rank": "A"
+    }
+  ],
+  "stock": [
+    {
+      "suit": "Diamonds",
+      "rank": "J"
+    },
+    {
+      "suit": "Hearts",
+      "rank": "A"
+    },
+    {
+      "suit": "Spades",
+      "rank": "J"
+    },
+    {
+      "suit": "Spades",
+      "rank": "K"
+    },
+    {
+      "suit": "Diamonds",
+      "rank": "6"
+    },
+    {
+      "suit": "Clubs",
+      "rank": "J"
+    },
+    {
+      "suit": "Diamonds",
+      "rank": "Q"
+    },
+    {
+      "suit": "Spades",
+      "rank": "4"
+    },
+    {
+      "suit": "Spades",
+      "rank": "2"
+    },
+    {
+      "suit": "Diamonds",
+      "rank": "A"
+    },
+    {
+      "suit": "Clubs",
+      "rank": "5"
+    },
+    {
+      "suit": "Spades",
+      "rank": "Q"
+    },
+    {
+      "suit": "Diamonds",
+      "rank": "7"
+    },
+    {
+      "suit": "Hearts",
+      "rank": "4"
+    },
+    {
+      "suit": "Hearts",
+      "rank": "5"
+    },
+    {
+      "suit": "Diamonds",
+      "rank": "K"
+    },
+    {
+      "suit": "Clubs",
+      "rank": "2"
+    },
+    {
+      "suit": "Hearts",
+      "rank": "2"
+    },
+    {
+      "suit": "Hearts",
+      "rank": "3"
+    },
+    {
+      "suit": "Clubs",
+      "rank": "Q"
+    },
+    {
+      "suit": "Diamonds",
+      "rank": "8"
+    },
+    {
+      "suit": "Spades",
+      "rank": "7"
+    },
+    {
+      "suit": "Spades",
+      "rank": "10"
+    },
+    {
+      "suit": "Spades",
+      "rank": "3"
+    },
+    {
+      "suit": "Spades",
+      "rank": "5"
+    },
+    {
+      "suit": "Hearts",
+      "rank": "J"
+    },
+    {
+      "suit": "Diamonds",
+      "rank": "2"
+    },
+    {
+      "suit": "Clubs",
+      "rank": "8"
+    },
+    {
+      "suit": "Hearts",
+      "rank": "6"
+    },
+    {
+      "suit": "Clubs",
+      "rank": "9"
+    },
+    {
+      "suit": "Hearts",
+      "rank": "8"
+    },
+    {
+      "suit": "Diamonds",
+      "rank": "5"
+    },
+    {
+      "suit": "Spades",
+      "rank": "A"
+    },
+    {
+      "suit": "Diamonds",
+      "rank": "10"
+    },
+    {
+      "suit": "Clubs",
+      "rank": "3"
+    },
+    {
+      "suit": "Diamonds",
+      "rank": "3"
+    },
+    {
+      "suit": "Spades",
+      "rank": "8"
+    },
+    {
+      "suit": "Diamonds",
+      "rank": "4"
+    },
+    {
+      "suit": "Clubs",
+      "rank": "4"
+    },
+    {
+      "suit": "Hearts",
+      "rank": "Q"
+    }
+  ],
+  "players": [
+    {
+      "name": "Human",
+      "is_ai": false,
+      "difficulty": "hard",
+      "total_score": 0,
+      "sweeps": 0,
+      "hand": [
+        {
+          "suit": "Clubs",
+          "rank": "10"
+        },
+        {
+          "suit": "Clubs",
+          "rank": "7"
+        },
+        {
+          "suit": "Hearts",
+          "rank": "K"
+        },
+        {
+          "suit": "Diamonds",
+          "rank": "9"
+        }
+      ],
+      "collection": []
+    },
+    {
+      "name": "Bot",
+      "is_ai": true,
+      "difficulty": "hard",
+      "total_score": 0,
+      "sweeps": 0,
+      "hand": [
+        {
+          "suit": "Hearts",
+          "rank": "7"
+        },
+        {
+          "suit": "Clubs",
+          "rank": "K"
+        },
+        {
+          "suit": "Hearts",
+          "rank": "10"
+        },
+        {
+          "suit": "Hearts",
+          "rank": "9"
+        }
+      ],
+      "collection": []
+    }
+  ],
+  "move_history": []
+}

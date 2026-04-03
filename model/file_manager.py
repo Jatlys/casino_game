@@ -1,5 +1,6 @@
 import json
 import os
+import re
 
 from model.card import Card
 from model.deck import Deck
@@ -7,6 +8,7 @@ from model.hand import Hand
 from model.player import Player
 
 SAVE_FILE = "save_data.json"
+SAVE_DIR = "."   # directory for all save files
 
 
 class FileManager:
@@ -43,17 +45,51 @@ class FileManager:
     """
 
     # ------------------------------------------------------------------
+    # Save-slot helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def slot_filename(player_names: list[str]) -> str:
+        """Return the save-file path for a given player roster.
+
+        Names are sanitised (non-alphanumeric replaced with '_') and joined
+        with underscores, e.g. ["Alice", "Bob"] → "save_Alice_Bob.json".
+        Falls back to SAVE_FILE when player_names is empty.
+        """
+        if not player_names:
+            return SAVE_FILE
+        safe = [re.sub(r"[^A-Za-z0-9]", "_", n) for n in player_names]
+        return os.path.join(SAVE_DIR, f"save_{'_'.join(safe)}.json")
+
+    @staticmethod
+    def list_saves() -> list[str]:
+        """Return a list of all save file paths found in SAVE_DIR."""
+        files = []
+        for name in os.listdir(SAVE_DIR):
+            if name.startswith("save_") and name.endswith(".json"):
+                files.append(os.path.join(SAVE_DIR, name))
+        # Also include the legacy file if present
+        if os.path.exists(SAVE_FILE) and SAVE_FILE not in files:
+            files.append(SAVE_FILE)
+        return sorted(files)
+
+    # ------------------------------------------------------------------
     # Save
     # ------------------------------------------------------------------
 
     @staticmethod
-    def save(game, move_history: list[dict] | None = None) -> None:
-        """Serialize full game state to SAVE_FILE.
+    def save(game, move_history: list[dict] | None = None,
+             player_names: list[str] | None = None) -> None:
+        """Serialize full game state to a save file.
 
         Args:
-            game: A running DeckCasinoGame instance.
+            game:         A running DeckCasinoGame instance.
             move_history: Optional list of move records (see record_move()).
+            player_names: When provided, saves to a player-roster-named slot
+                          (e.g. "save_Alice_Bob.json").  When omitted, saves
+                          to the legacy SAVE_FILE for backwards compatibility.
         """
+        path = FileManager.slot_filename(player_names) if player_names else SAVE_FILE
         data = {
             "turn_index": game._turn_index,
             "table_cards": [FileManager._card_to_dict(c) for c in game._table_cards],
@@ -72,7 +108,7 @@ class FileManager:
             ],
             "move_history": move_history or [],
         }
-        with open(SAVE_FILE, "w", encoding="utf-8") as fh:
+        with open(path, "w", encoding="utf-8") as fh:
             json.dump(data, fh, indent=2)
 
     # ------------------------------------------------------------------
@@ -80,15 +116,21 @@ class FileManager:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def load() -> "tuple | None":
-        """Load and restore game state from SAVE_FILE.
+    def load(player_names: list[str] | None = None) -> "tuple | None":
+        """Load and restore game state from a save file.
+
+        Args:
+            player_names: When provided, looks for a player-roster-named slot
+                          file (e.g. "save_Alice_Bob.json").  When omitted,
+                          falls back to the legacy SAVE_FILE.
 
         Returns:
             (DeckCasinoGame, move_history) tuple, or None if no save exists.
         """
-        if not os.path.exists(SAVE_FILE):
+        path = FileManager.slot_filename(player_names) if player_names else SAVE_FILE
+        if not os.path.exists(path):
             return None
-        with open(SAVE_FILE, encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
         return FileManager.restore(data)
 

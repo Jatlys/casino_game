@@ -331,6 +331,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._game_manager = GameManager()
         self._move_history: list[dict] = []
+        self._player_names: list[str] = []
         self._init_ui()
 
     def _init_ui(self) -> None:
@@ -399,12 +400,22 @@ class MainWindow(QMainWindow):
         # Blackjack and Baccarat handled in Week 5/6
 
     def _launch_deck_casino(self) -> None:
-        # Step 1: offer to resume a saved game if one exists
-        saved = FileManager.load()
+        # Step 1: mode + player setup
+        dialog = PlayerSetupDialog(self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        players = dialog.get_players()
+        self._player_names = [p.name for p in players]
+        self._move_history = []
+
+        # Step 2: check for a matching roster save file and offer to resume
+        saved = FileManager.load(self._player_names)
         if saved is not None:
             reply = QMessageBox.question(
                 self, "Resume Saved Game",
-                "A saved game was found. Resume where you left off?",
+                f"A saved game was found for {', '.join(self._player_names)}. "
+                "Resume where you left off?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             )
             if reply == QMessageBox.StandardButton.Yes:
@@ -414,14 +425,6 @@ class MainWindow(QMainWindow):
                 self.switch_view(self.DECK_CASINO)
                 self.update_sidebar(game.current_player)
                 return
-
-        # Step 2: mode + player setup
-        dialog = PlayerSetupDialog(self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-
-        players = dialog.get_players()
-        self._move_history = []
 
         # Step 3: tutorial mode prompt
         tutorial_dialog = TutorialModeDialog(self)
@@ -550,7 +553,7 @@ class MainWindow(QMainWindow):
 
         self._deck_casino_view.refresh(game)
         self.update_sidebar(game.current_player)
-        FileManager.save(game, self._move_history)
+        FileManager.save(game, self._move_history, self._player_names or None)
 
 
 if __name__ == "__main__":

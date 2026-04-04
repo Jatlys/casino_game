@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout, QVBoxLayout,
     QStackedWidget, QLabel, QPushButton, QButtonGroup, QRadioButton,
     QDialog, QDialogButtonBox, QFormLayout, QLineEdit, QMessageBox, QFrame,
+    QInputDialog,
 )
 from PyQt6.QtGui import QFont, QIcon
 
@@ -17,6 +18,8 @@ from model.ai_opponent import AIOpponent
 from model.file_manager import FileManager
 from view.lobby_view import LobbyView
 from view.deck_casino_view import DeckCasinoView
+from view.blackjack_view import BlackjackView
+from view.baccarat_view import BaccaratView
 from view.drawn_assets import make_window_icon, RoundResultOverlay
 
 
@@ -326,6 +329,8 @@ class MainWindow(QMainWindow):
     # View name constants
     LOBBY       = "lobby"
     DECK_CASINO = "Deck Casino"
+    BLACKJACK   = "Blackjack"
+    BACCARAT    = "Baccarat"
 
     def __init__(self) -> None:
         super().__init__()
@@ -353,13 +358,23 @@ class MainWindow(QMainWindow):
         # Register views
         self._lobby_view       = LobbyView()
         self._deck_casino_view = DeckCasinoView()
+        self._blackjack_view   = BlackjackView()
+        self._baccarat_view    = BaccaratView()
 
         self.add_view(self._lobby_view,       self.LOBBY)
         self.add_view(self._deck_casino_view, self.DECK_CASINO)
+        self.add_view(self._blackjack_view,   self.BLACKJACK)
+        self.add_view(self._baccarat_view,    self.BACCARAT)
 
         # Connect navigation signals
         self._lobby_view.game_selected.connect(self._on_game_selected)
         self._deck_casino_view.back_pressed.connect(
+            lambda: self.switch_view(self.LOBBY)
+        )
+        self._blackjack_view.back_pressed.connect(
+            lambda: self.switch_view(self.LOBBY)
+        )
+        self._baccarat_view.back_pressed.connect(
             lambda: self.switch_view(self.LOBBY)
         )
         self._sidebar._lobby_btn.clicked.connect(
@@ -397,7 +412,10 @@ class MainWindow(QMainWindow):
     def _on_game_selected(self, game_name: str) -> None:
         if game_name == self.DECK_CASINO:
             self._launch_deck_casino()
-        # Blackjack and Baccarat handled in Week 5/6
+        elif game_name == self.BLACKJACK:
+            self._launch_blackjack()
+        elif game_name == self.BACCARAT:
+            self._launch_baccarat()
 
     def _launch_deck_casino(self) -> None:
         # Step 1: mode + player setup
@@ -438,6 +456,24 @@ class MainWindow(QMainWindow):
 
         if tutorial_mode:
             self._deck_casino_view.start_tutorial()
+
+    def _launch_blackjack(self) -> None:
+        name, ok = QInputDialog.getText(self, "Player Name", "Enter your name:")
+        if not ok or not name.strip():
+            return
+        from model.blackjack_game import BlackjackGame
+        player = Player(name.strip())
+        self._blackjack_view.set_game(BlackjackGame(player))
+        self.switch_view(self.BLACKJACK)
+
+    def _launch_baccarat(self) -> None:
+        name, ok = QInputDialog.getText(self, "Player Name", "Enter your name:")
+        if not ok or not name.strip():
+            return
+        from model.baccarat_game import BaccaratGame
+        player = Player(name.strip())
+        self._baccarat_view.set_game(BaccaratGame(player))
+        self.switch_view(self.BACCARAT)
 
     # Deck Casino actions
 

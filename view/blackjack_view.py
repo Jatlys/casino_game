@@ -196,6 +196,11 @@ class BlackjackView(QWidget):
 
     # ── Public API ─────────────────────────────────────────────────────
 
+    @property
+    def current_bankroll(self) -> int:
+        """Current bankroll of the active player (0 if no game loaded)."""
+        return self._game.player.bankroll if self._game else 0
+
     def set_game(self, game: BlackjackGame) -> None:
         self._game = game
         self._settled = False

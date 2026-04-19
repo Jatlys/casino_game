@@ -7,8 +7,9 @@ from model.deck import Deck
 from model.hand import Hand
 from model.player import Player
 
-SAVE_FILE = "save_data.json"
-SAVE_DIR = "."   # directory for all save files
+SAVE_FILE     = "save_data.json"
+BANKROLL_FILE = "bankrolls.json"   # shared per-name bankroll store
+SAVE_DIR      = "."                # directory for all save files
 
 
 class FileManager:
@@ -43,6 +44,41 @@ class FileManager:
       ]
     }
     """
+
+    # ------------------------------------------------------------------
+    # Per-player bankroll store  (bankrolls.json)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def load_bankroll(name: str) -> int:
+        """Return the persisted bankroll for *name*, or the default if not found.
+
+        Each player name maps to a single bankroll that is shared across
+        Blackjack, Baccarat, and any other game that uses it.  Different
+        names (e.g. "hi" and "hi2") are stored as separate entries.
+        """
+        path = os.path.join(SAVE_DIR, BANKROLL_FILE)
+        if not os.path.exists(path):
+            return Player.DEFAULT_BANKROLL
+        with open(path, encoding="utf-8") as fh:
+            data: dict = json.load(fh)
+        return data.get(name, Player.DEFAULT_BANKROLL)
+
+    @staticmethod
+    def save_bankroll(name: str, amount: int) -> None:
+        """Persist *amount* as the bankroll for *name* in bankrolls.json.
+
+        If the file already contains entries for other players they are
+        preserved — only *name*'s entry is updated.
+        """
+        path = os.path.join(SAVE_DIR, BANKROLL_FILE)
+        data: dict = {}
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as fh:
+                data = json.load(fh)
+        data[name] = amount
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, indent=2)
 
     # ------------------------------------------------------------------
     # Save-slot helpers
@@ -101,6 +137,7 @@ class FileManager:
                     "difficulty": p.difficulty,
                     "total_score": p.total_score,
                     "sweeps": p.sweeps,
+                    "bankroll": p.bankroll,
                     "hand": [FileManager._card_to_dict(c) for c in p.hand.cards],
                     "collection": [FileManager._card_to_dict(c) for c in p.collection],
                 }
@@ -149,8 +186,10 @@ class FileManager:
         # Rebuild players with full state
         players: list[Player] = []
         for pd in data["players"]:
+            saved_bankroll = pd.get("bankroll", Player.DEFAULT_BANKROLL)
             p = Player(pd["name"], is_ai=pd["is_ai"],
-                       difficulty=pd.get("difficulty", "hard"))
+                       difficulty=pd.get("difficulty", "hard"),
+                       bankroll=saved_bankroll)
             p._total_score = pd["total_score"]
             p._sweeps = pd["sweeps"]
             for cd in pd["hand"]:

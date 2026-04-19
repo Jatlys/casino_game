@@ -235,19 +235,23 @@ class PlayerSetupDialog(QDialog):
     # ------------------------------------------------------------------
 
     def get_players(self) -> list[Player]:
-        """Return a Player list ready to pass to DeckCasinoGame."""
+        """Return a Player list ready to pass to DeckCasinoGame.
+
+        Human players are initialised with their persisted bankroll so that
+        a balance built up in Blackjack / Baccarat carries over here too.
+        """
         if self._pvp_radio.isChecked():
             names = [
                 e.text().strip()
                 for e in self._pvp_name_edits
                 if e.text().strip()
             ]
-            return [Player(n) for n in names]
+            return [Player(n, bankroll=FileManager.load_bankroll(n)) for n in names]
         else:
             human = self._human_name_edit.text().strip() or "Player 1"
             diff  = self._selected_difficulty()
             return [
-                Player(human),
+                Player(human, bankroll=FileManager.load_bankroll(human)),
                 Player("Computer", is_ai=True, difficulty=diff),
             ]
 
@@ -477,20 +481,29 @@ class MainWindow(QMainWindow):
             return
         from model.blackjack_game import BlackjackGame
         pname = name.strip()
-        player = Player(pname)
+        # Load this player's saved bankroll — each name has its own balance
+        saved_bankroll = FileManager.load_bankroll(pname)
+        player = Player(pname, bankroll=saved_bankroll)
         self._blackjack_view.set_game(BlackjackGame(player))
-        # Re-connect so the player name is captured for history entries
+        # Re-connect so the player name and bankroll saving are wired per session
         try:
             self._blackjack_view.round_finished.disconnect()
         except TypeError:
             pass
         self._blackjack_view.round_finished.connect(
-            lambda result, delta, detail, n=pname: self._history_view.add_entry(
-                HistoryEntry(game="Blackjack", player=n, result=result,
-                             delta=delta, detail=detail)
-            )
+            lambda result, delta, detail, n=pname:
+                self._on_blackjack_round_finished(n, result, delta, detail)
         )
         self.switch_view(self.BLACKJACK)
+
+    def _on_blackjack_round_finished(self, player_name: str, result: str,
+                                     delta: int, detail: str) -> None:
+        """Save bankroll and record history after a Blackjack round."""
+        FileManager.save_bankroll(player_name, self._blackjack_view.current_bankroll)
+        self._history_view.add_entry(
+            HistoryEntry(game="Blackjack", player=player_name, result=result,
+                         delta=delta, detail=detail)
+        )
 
     def _launch_baccarat(self) -> None:
         name, ok = QInputDialog.getText(self, "Player Name", "Enter your name:")
@@ -498,20 +511,29 @@ class MainWindow(QMainWindow):
             return
         from model.baccarat_game import BaccaratGame
         pname = name.strip()
-        player = Player(pname)
+        # Load this player's saved bankroll — each name has its own balance
+        saved_bankroll = FileManager.load_bankroll(pname)
+        player = Player(pname, bankroll=saved_bankroll)
         self._baccarat_view.set_game(BaccaratGame(player))
-        # Re-connect so the player name is captured for history entries
+        # Re-connect so the player name and bankroll saving are wired per session
         try:
             self._baccarat_view.round_finished.disconnect()
         except TypeError:
             pass
         self._baccarat_view.round_finished.connect(
-            lambda result, delta, detail, n=pname: self._history_view.add_entry(
-                HistoryEntry(game="Baccarat", player=n, result=result,
-                             delta=delta, detail=detail)
-            )
+            lambda result, delta, detail, n=pname:
+                self._on_baccarat_round_finished(n, result, delta, detail)
         )
         self.switch_view(self.BACCARAT)
+
+    def _on_baccarat_round_finished(self, player_name: str, result: str,
+                                    delta: int, detail: str) -> None:
+        """Save bankroll and record history after a Baccarat round."""
+        FileManager.save_bankroll(player_name, self._baccarat_view.current_bankroll)
+        self._history_view.add_entry(
+            HistoryEntry(game="Baccarat", player=player_name, result=result,
+                         delta=delta, detail=detail)
+        )
 
     # Deck Casino actions
 

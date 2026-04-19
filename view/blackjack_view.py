@@ -8,18 +8,42 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from model.blackjack_game import BlackjackGame
 from view.card_widget import CardWidget
 from view.deck_casino_view import TableZoneWidget
+from view.drawn_assets import ChipWidget
+
+# Quick-bet chip denominations shown as clickable chip buttons
+_CHIP_DENOMS = (1, 5, 10, 25, 50, 100)
 
 
 class BettingPanel(QWidget):
-    """Shared bet-entry widget: spin box + action button."""
+    """Shared bet-entry widget: chip quick-bet buttons + spin box + action button."""
 
     bet_confirmed = pyqtSignal(int)
 
     def __init__(self, button_label: str = "Deal", parent=None) -> None:
         super().__init__(parent)
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(4)
+
+        # ── Chip row ─────────────────────────────────────────────────────
+        chip_row = QHBoxLayout()
+        chip_row.setSpacing(6)
+        chip_row.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        for denom in _CHIP_DENOMS:
+            chip = ChipWidget(denomination=denom, diameter=36)
+            chip.setToolTip(f"Add ${denom} to bet")
+            chip.setCursor(Qt.CursorShape.PointingHandCursor)
+            # Use mousePressEvent via lambda capture
+            chip.mousePressEvent = (
+                lambda _event, d=denom: self._add_to_bet(d)
+            )
+            chip_row.addWidget(chip)
+        root.addLayout(chip_row)
+
+        # ── Spin + confirm row ────────────────────────────────────────────
+        spin_row = QHBoxLayout()
+        spin_row.setContentsMargins(0, 0, 0, 0)
+        spin_row.setSpacing(8)
 
         lbl = QLabel("Bet: $")
         lbl.setStyleSheet("color: white; font-weight: bold;")
@@ -34,9 +58,15 @@ class BettingPanel(QWidget):
         self._btn.setFixedWidth(80)
         self._btn.clicked.connect(lambda: self.bet_confirmed.emit(self._spin.value()))
 
-        layout.addWidget(lbl)
-        layout.addWidget(self._spin)
-        layout.addWidget(self._btn)
+        spin_row.addWidget(lbl)
+        spin_row.addWidget(self._spin)
+        spin_row.addWidget(self._btn)
+        root.addLayout(spin_row)
+
+    def _add_to_bet(self, amount: int) -> None:
+        """Increase the spin box value by amount, capped at its maximum."""
+        new_val = min(self._spin.value() + amount, self._spin.maximum())
+        self._spin.setValue(new_val)
 
     def update_max(self, bankroll: int) -> None:
         m = max(1, bankroll)
@@ -56,12 +86,15 @@ class BlackjackView(QWidget):
     Emits back_pressed to return to the lobby.
     """
 
-    back_pressed = pyqtSignal()
+    back_pressed    = pyqtSignal()
+    # Emitted once per settled round: (result_str, bankroll_delta, detail_str)
+    round_finished  = pyqtSignal(str, int, str)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._game: BlackjackGame | None = None
         self._settled: bool = False
+        self._bankroll_before: int = 0
         self._init_ui()
 
     # ── UI construction ────────────────────────────────────────────────
@@ -166,6 +199,7 @@ class BlackjackView(QWidget):
     def set_game(self, game: BlackjackGame) -> None:
         self._game = game
         self._settled = False
+        self._bankroll_before = game.player.bankroll
         self._bet_panel.update_max(game.player.bankroll)
         self._reset_for_betting()
 
@@ -228,7 +262,37 @@ class BlackjackView(QWidget):
         if self._game and self._game.phase == "done" and not self._settled:
             self._game.settle_bets()
             self._settled = True
+            self._emit_round_finished()
         self.refresh()
+
+    def _emit_round_finished(self) -> None:
+        """Fire round_finished signal with result, delta, and detail."""
+        if self._game is None:
+            return
+        try:
+            results = self._game.get_results()
+        except RuntimeError:
+            return
+        delta = self._game.player.bankroll - self._bankroll_before
+        label_map = {"natural": "win", "win": "win", "push": "draw",
+                     "bust": "loss", "lose": "loss"}
+        # Overall outcome: win if any hand won, else draw or loss
+        outcomes = [r["outcome"] for r in results]
+        if any(o in ("natural", "win") for o in outcomes):
+            result_str = "win"
+        elif all(o in ("bust", "lose") for o in outcomes):
+            result_str = "loss"
+        else:
+            result_str = "draw"
+        detail_parts = []
+        for r in results:
+            if r["outcome"] == "natural":
+                detail_parts.append("Natural Blackjack")
+            elif r["outcome"] == "bust":
+                detail_parts.append("Bust")
+        detail = ", ".join(detail_parts)
+        self._bankroll_before = self._game.player.bankroll
+        self.round_finished.emit(result_str, delta, detail)
 
     def refresh(self) -> None:
         if self._game is None:

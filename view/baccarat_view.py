@@ -20,11 +20,14 @@ class BaccaratView(QWidget):
     Third-card drawing is shown with a short QTimer delay.
     """
 
-    back_pressed = pyqtSignal()
+    back_pressed    = pyqtSignal()
+    # Emitted once per settled round: (result_str, bankroll_delta, detail_str)
+    round_finished  = pyqtSignal(str, int, str)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._game: BaccaratGame | None = None
+        self._bankroll_before: int = 0
         self._init_ui()
 
     # ── UI construction ────────────────────────────────────────────────
@@ -148,6 +151,7 @@ class BaccaratView(QWidget):
 
     def set_game(self, game: BaccaratGame) -> None:
         self._game = game
+        self._bankroll_before = game.player.bankroll
         self._bet_panel.update_max(game.player.bankroll)
         self._reset_for_betting()
 
@@ -194,6 +198,14 @@ class BaccaratView(QWidget):
                  "tie": "TIE"}.get(outcome, outcome.upper())
         self._result_lbl.setText(
             f"{label}{natural_tag}  —  Punto {pt}  vs  Banco {bt}   Payout: ${payout}")
+
+        # Emit history signal
+        delta = self._game.player.bankroll - self._bankroll_before
+        result_str = ("win" if outcome in ("punto_win", "banco_win") and delta > 0
+                      else "draw" if outcome == "tie" else "loss")
+        detail = "Natural!" if result["natural"] else f"Punto {pt} vs Banco {bt}"
+        self._bankroll_before = self._game.player.bankroll
+        self.round_finished.emit(result_str, delta, detail)
 
         # Highlight winner header
         self._punto_hdr.setStyleSheet(

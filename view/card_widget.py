@@ -1,9 +1,9 @@
 # Card rendering with QPainter — standard poker card proportions (1:1.4 ratio). https://www.papersizeswiki.com/standard-playing-card-size/
 # Special card gold border follows project plan Section 6 special card rules.
 
-from PyQt6.QtWidgets import QWidget
+from PyQt6.QtWidgets import QWidget, QGraphicsOpacityEffect
 from PyQt6.QtGui import QPainter, QColor, QFont, QPen, QBrush
-from PyQt6.QtCore import Qt, QRect, QRectF, pyqtSignal
+from PyQt6.QtCore import Qt, QRect, QRectF, QTimer, QPropertyAnimation, QEasingCurve, pyqtSignal
 
 from model.card import Card
 
@@ -45,6 +45,15 @@ class CardWidget(QWidget):
         self._card = card
         self._face_down = face_down
         self._selected = False
+
+        # Opacity effect shared by deal and flip animations
+        self._opacity_effect = QGraphicsOpacityEffect(self)
+        self._opacity_effect.setOpacity(1.0)
+        self.setGraphicsEffect(self._opacity_effect)
+
+        self._anim = QPropertyAnimation(self._opacity_effect, b"opacity", self)
+        self._anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+
         self.setFixedSize(CARD_W, CARD_H)
 
     # Public interface
@@ -59,6 +68,44 @@ class CardWidget(QWidget):
         """Highlight the card as selected and trigger a repaint."""
         self._selected = selected
         self.update()
+
+    # Animations
+
+    def animate_deal(self) -> None:
+        """Fade the card in over 220 ms — used when dealing cards."""
+        self._anim.stop()
+        self._opacity_effect.setOpacity(0.0)
+        self._anim.setDuration(220)
+        self._anim.setStartValue(0.0)
+        self._anim.setEndValue(1.0)
+        self._anim.start()
+
+    def animate_flip(self, new_card: Card | None = None,
+                     new_face_down: bool = False) -> None:
+        """Simulate a card flip: fade out → swap face → fade in.
+
+        Args:
+            new_card:      The card to show after the flip (None leaves unchanged).
+            new_face_down: Whether the card should be face-down after the flip.
+        """
+        self._anim.stop()
+        self._anim.setDuration(160)
+        self._anim.setStartValue(1.0)
+        self._anim.setEndValue(0.0)
+        self._anim.start()
+
+        def _swap() -> None:
+            if new_card is not None:
+                self._card = new_card
+            self._face_down = new_face_down
+            self.update()
+            self._anim.stop()
+            self._anim.setDuration(160)
+            self._anim.setStartValue(0.0)
+            self._anim.setEndValue(1.0)
+            self._anim.start()
+
+        QTimer.singleShot(170, _swap)
 
     # Events
 

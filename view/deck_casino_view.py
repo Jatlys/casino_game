@@ -162,8 +162,12 @@ class DeckCasinoView(QWidget):
 
     # Public
 
-    def refresh(self, game) -> None:
-        """Rebuild the entire view from the current game state."""
+    def refresh(self, game, animate_deal: bool = False) -> None:
+        """Rebuild the entire view from the current game state.
+
+        Args:
+            animate_deal: If True, newly placed cards fade in with deal animations.
+        """
         self._current_game = game
         self._selected_hand_card = None
         self._selected_table_cards = set()
@@ -172,8 +176,8 @@ class DeckCasinoView(QWidget):
         self._player_name_label.setText(f"{game.current_player.name}'s Hand")
 
         self._rebuild_scores(game.players, len(game.deck))
-        self._rebuild_table_cards(game.table_cards)
-        self._rebuild_hand_cards(game.current_player.hand.cards)
+        self._rebuild_table_cards(game.table_cards, animate=animate_deal)
+        self._rebuild_hand_cards(game.current_player.hand.cards, animate=animate_deal)
         self._update_buttons()
 
     def _on_hint_toggled(self, checked: bool) -> None:
@@ -260,7 +264,7 @@ class DeckCasinoView(QWidget):
         stock_lbl.setStyleSheet("color: #aaaaaa;")
         self._scores_layout.addWidget(stock_lbl)
 
-    def _rebuild_table_cards(self, cards: list) -> None:
+    def _rebuild_table_cards(self, cards: list, animate: bool = False) -> None:
         self._clear_layout(self._table_card_layout)
         self._table_card_widgets = []
         if not cards:
@@ -269,20 +273,24 @@ class DeckCasinoView(QWidget):
             placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self._table_card_layout.addWidget(placeholder)
             return
-        for card in cards:
+        for i, card in enumerate(cards):
             w = CardWidget(card)
             w.clicked.connect(lambda c=card, widget=w: self._on_table_card_clicked(c, widget))
             self._table_card_layout.addWidget(w)
             self._table_card_widgets.append((card, w))
+            if animate:
+                QTimer.singleShot(i * 60, w.animate_deal)
 
-    def _rebuild_hand_cards(self, cards: list) -> None:
+    def _rebuild_hand_cards(self, cards: list, animate: bool = False) -> None:
         self._clear_layout(self._hand_card_layout)
         self._hand_card_widgets = []
-        for card in cards:
+        for i, card in enumerate(cards):
             w = CardWidget(card)
             w.clicked.connect(lambda c=card, widget=w: self._on_hand_card_clicked(c, widget))
             self._hand_card_layout.addWidget(w)
             self._hand_card_widgets.append((card, w))
+            if animate:
+                QTimer.singleShot(i * 60, w.animate_deal)
         self._hand_card_layout.addStretch()
 
     # Interaction handlers

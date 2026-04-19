@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
     QDialog, QDialogButtonBox, QFormLayout, QLineEdit, QMessageBox, QFrame,
     QInputDialog,
 )
+from PyQt6.QtCore import QCoreApplication
 from PyQt6.QtGui import QFont, QIcon
 
 from controller.game_manager import GameManager
@@ -20,6 +21,7 @@ from view.lobby_view import LobbyView
 from view.deck_casino_view import DeckCasinoView
 from view.blackjack_view import BlackjackView
 from view.baccarat_view import BaccaratView
+from view.game_history_view import GameHistoryView, HistoryEntry
 from view.drawn_assets import make_window_icon, RoundResultOverlay
 
 
@@ -302,12 +304,14 @@ class SidebarWidget(QWidget):
         self._score_label = QLabel("Score: 0")  # Cumulative score display
 
         self._lobby_btn    = QPushButton("Lobby")
+        self._history_btn  = QPushButton("History")
         self._settings_btn = QPushButton("Settings")
 
         layout.addWidget(self._name_label)
         layout.addWidget(self._score_label)
         layout.addStretch()                     # Push buttons to the bottom
         layout.addWidget(self._lobby_btn)
+        layout.addWidget(self._history_btn)
         layout.addWidget(self._settings_btn)
 
         self.setLayout(layout)
@@ -331,6 +335,7 @@ class MainWindow(QMainWindow):
     DECK_CASINO = "Deck Casino"
     BLACKJACK   = "Blackjack"
     BACCARAT    = "Baccarat"
+    HISTORY     = "History"
 
     def __init__(self) -> None:
         super().__init__()
@@ -360,11 +365,13 @@ class MainWindow(QMainWindow):
         self._deck_casino_view = DeckCasinoView()
         self._blackjack_view   = BlackjackView()
         self._baccarat_view    = BaccaratView()
+        self._history_view     = GameHistoryView()
 
         self.add_view(self._lobby_view,       self.LOBBY)
         self.add_view(self._deck_casino_view, self.DECK_CASINO)
         self.add_view(self._blackjack_view,   self.BLACKJACK)
         self.add_view(self._baccarat_view,    self.BACCARAT)
+        self.add_view(self._history_view,     self.HISTORY)
 
         # Connect navigation signals
         self._lobby_view.game_selected.connect(self._on_game_selected)
@@ -377,13 +384,20 @@ class MainWindow(QMainWindow):
         self._baccarat_view.back_pressed.connect(
             lambda: self.switch_view(self.LOBBY)
         )
+        self._history_view.back_pressed.connect(
+            lambda: self.switch_view(self.LOBBY)
+        )
         self._sidebar._lobby_btn.clicked.connect(
             lambda: self.switch_view(self.LOBBY)
+        )
+        self._sidebar._history_btn.clicked.connect(
+            lambda: self.switch_view(self.HISTORY)
         )
 
         # Connect Deck Casino action signals
         self._deck_casino_view.take_requested.connect(self._on_deck_casino_take)
         self._deck_casino_view.place_requested.connect(self._on_deck_casino_place)
+
 
         self.switch_view(self.LOBBY) # Start on the lobby screen
 
@@ -450,7 +464,7 @@ class MainWindow(QMainWindow):
 
         self._game_manager.start_deck_casino(players)
 
-        self._deck_casino_view.refresh(self._game_manager.active_game)
+        self._deck_casino_view.refresh(self._game_manager.active_game, animate_deal=True)
         self.switch_view(self.DECK_CASINO)
         self.update_sidebar(self._game_manager.active_game.current_player)
 
@@ -462,8 +476,20 @@ class MainWindow(QMainWindow):
         if not ok or not name.strip():
             return
         from model.blackjack_game import BlackjackGame
-        player = Player(name.strip())
+        pname = name.strip()
+        player = Player(pname)
         self._blackjack_view.set_game(BlackjackGame(player))
+        # Re-connect so the player name is captured for history entries
+        try:
+            self._blackjack_view.round_finished.disconnect()
+        except TypeError:
+            pass
+        self._blackjack_view.round_finished.connect(
+            lambda result, delta, detail, n=pname: self._history_view.add_entry(
+                HistoryEntry(game="Blackjack", player=n, result=result,
+                             delta=delta, detail=detail)
+            )
+        )
         self.switch_view(self.BLACKJACK)
 
     def _launch_baccarat(self) -> None:
@@ -471,8 +497,20 @@ class MainWindow(QMainWindow):
         if not ok or not name.strip():
             return
         from model.baccarat_game import BaccaratGame
-        player = Player(name.strip())
+        pname = name.strip()
+        player = Player(pname)
         self._baccarat_view.set_game(BaccaratGame(player))
+        # Re-connect so the player name is captured for history entries
+        try:
+            self._baccarat_view.round_finished.disconnect()
+        except TypeError:
+            pass
+        self._baccarat_view.round_finished.connect(
+            lambda result, delta, detail, n=pname: self._history_view.add_entry(
+                HistoryEntry(game="Baccarat", player=n, result=result,
+                             delta=delta, detail=detail)
+            )
+        )
         self.switch_view(self.BACCARAT)
 
     # Deck Casino actions
@@ -530,6 +568,23 @@ class MainWindow(QMainWindow):
 
     # ── Deck Casino action handlers ───────────────────────────────────────────
 
+    def _record_deck_casino_round(self, game) -> None:
+        """Add one HistoryEntry per player for the just-ended Deck Casino round."""
+        ranked = sorted(game.players, key=lambda p: p.total_score, reverse=True)
+        for rank, player in enumerate(ranked, start=1):
+            placement = {1: "1st", 2: "2nd", 3: "3rd"}.get(rank, f"#{rank}")
+            result_str = "win" if rank == 1 else "loss"
+            detail = f"{player.sweeps} sweep(s)" if player.sweeps else ""
+            self._history_view.add_entry(
+                HistoryEntry(
+                    game="Deck Casino",
+                    player=player.name,
+                    result=placement,
+                    delta=player.total_score,
+                    detail=detail,
+                )
+            )
+
     def _on_deck_casino_take(self, card, take: frozenset) -> None:
         game = self._game_manager.active_game
         player = game.current_player
@@ -563,6 +618,7 @@ class MainWindow(QMainWindow):
         # Auto-play all consecutive AI turns before handing back to the human.
         # Also skip over any human player whose hand is empty (deck already
         # exhausted), so the AI can finish playing its remaining cards.
+        # processEvents() keeps the UI responsive during long AI chains.
         while not game.is_round_over():
             cp = game.current_player
             if cp.is_ai:
@@ -570,6 +626,7 @@ class MainWindow(QMainWindow):
                 sweeps_before = {p: p.sweeps for p in game.players}
                 game.play_card(card, take)
                 self._show_capture_events(cp, card, take, sweeps_before)
+                QCoreApplication.processEvents()
             elif cp.hand.is_empty():
                 game.advance_turn()
             else:
@@ -577,6 +634,7 @@ class MainWindow(QMainWindow):
 
         if game.is_round_over():
             game.end_round()
+            self._record_deck_casino_round(game)
 
             is_game_over = game.has_winner()
             RoundResultOverlay(game.players, is_game_over=is_game_over, parent=self).exec()
@@ -586,8 +644,9 @@ class MainWindow(QMainWindow):
                 return
 
             game.start_game()
-
-        self._deck_casino_view.refresh(game)
+            self._deck_casino_view.refresh(game, animate_deal=True)
+        else:
+            self._deck_casino_view.refresh(game)
         self.update_sidebar(game.current_player)
         FileManager.save(game, self._move_history, self._player_names or None)
 

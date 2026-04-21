@@ -9,12 +9,16 @@ class Player:
     cumulative score across rounds.
     """
 
-    def __init__(self, name: str, is_ai: bool = False, difficulty: str = "hard") -> None:
+    DEFAULT_BANKROLL = 1000
+
+    def __init__(self, name: str, is_ai: bool = False, difficulty: str = "hard",
+                 bankroll: int = DEFAULT_BANKROLL) -> None:
         self._name = name
         self._is_ai = is_ai
         self._difficulty = difficulty  # "easy" | "medium" | "hard" (AI only)
         self._total_score = 0
         self._sweeps = 0
+        self._bankroll = bankroll
         self.hand: Hand = Hand(owner=name)
         self._collection: list[Card] = []
 
@@ -22,27 +26,59 @@ class Player:
 
     @property
     def name(self) -> str:
+        """Display name of this player."""
         return self._name
 
     @property
     def is_ai(self) -> bool:
+        """True if this player is controlled by AIOpponent."""
         return self._is_ai
 
     @property
     def difficulty(self) -> str:
+        """AI difficulty level: "easy", "medium", or "hard"."""
         return self._difficulty
 
     @property
     def total_score(self) -> int:
+        """Cumulative Deck Casino score across all rounds."""
         return self._total_score
 
     @property
     def sweeps(self) -> int:
+        """Number of sweeps scored in the current round."""
         return self._sweeps
 
     @property
     def collection(self) -> list[Card]:
+        """Return a copy of all cards collected this round."""
         return list(self._collection)
+
+    @property
+    def bankroll(self) -> int:
+        """Current bankroll used for Blackjack and Baccarat bets."""
+        return self._bankroll
+
+    # Bankroll management (Blackjack / Baccarat)
+
+    def place_bet(self, amount: int) -> None:
+        """Deduct a bet from the bankroll.
+
+        Raises:
+            ValueError: if amount <= 0 or exceeds the current bankroll.
+        """
+        if amount <= 0:
+            raise ValueError("Bet must be greater than 0.")
+        if amount > self._bankroll:
+            raise ValueError(f"Bet {amount} exceeds bankroll {self._bankroll}.")
+        self._bankroll -= amount
+
+    def win(self, payout: int) -> None:
+        """Add a payout to the bankroll (includes returned bet + winnings)."""
+        self._bankroll += payout
+
+    def lose(self) -> None:
+        """No-op — bankroll was already reduced by place_bet()."""
 
     # Deck Casino scoring
 

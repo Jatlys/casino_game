@@ -5,6 +5,7 @@
 #   make_window_icon(size)          → QPixmap  — 4-suit app icon
 #   make_history_icon(kind, size)   → QPixmap  — "take" | "place" | "sweep"
 #   AvatarWidget                    — circular player-initial badge (standalone)
+#   ChipWidget                      — QPainter-drawn casino chip with denomination
 #   SweepFlashOverlay               — animated full-widget sweep announcement
 #   RoundResultOverlay              — styled round / game-over result dialog
 
@@ -182,6 +183,7 @@ class AvatarWidget(QWidget):
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
     def paintEvent(self, _event) -> None:
+        """Draw the circular avatar with the player's initial letter."""
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         d = min(self.width(), self.height())
@@ -196,7 +198,81 @@ class AvatarWidget(QWidget):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 4.  Sweep flash overlay
+# 4.  Casino chip widget  (QPainter-drawn, no image files)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Chip colour palette keyed by denomination
+_CHIP_COLORS: dict[int, tuple[str, str]] = {
+    1:    ("#ffffff", "#1a1a1a"),   # white   / dark-grey text
+    5:    ("#d32f2f", "#ffffff"),   # red     / white text
+    10:   ("#1565c0", "#ffffff"),   # blue    / white text
+    25:   ("#2e7d32", "#ffffff"),   # green   / white text
+    50:   ("#f57f17", "#1a1a1a"),   # orange  / dark text
+    100:  ("#4a148c", "#ffffff"),   # purple  / white text
+    500:  ("#ad1457", "#ffffff"),   # pink    / white text
+}
+_CHIP_DEFAULT_COLOR = ("#546e7a", "#ffffff")  # grey fallback
+
+
+class ChipWidget(QWidget):
+    """QPainter-drawn casino chip showing a monetary denomination.
+
+    The chip is circular with a coloured face, an outer dashed ring,
+    and the denomination centred in the chip.
+
+    Usage::
+
+        chip = ChipWidget(denomination=25, diameter=42)
+    """
+
+    def __init__(self, denomination: int = 1, diameter: int = 42,
+                 parent=None) -> None:
+        super().__init__(parent)
+        self._denom    = denomination
+        self._diameter = diameter
+        bg, fg = _CHIP_COLORS.get(denomination, _CHIP_DEFAULT_COLOR)
+        self._bg = QColor(bg)
+        self._fg = QColor(fg)
+        self.setFixedSize(diameter, diameter)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+
+    def paintEvent(self, _event) -> None:
+        """Draw the chip face with its denomination value."""
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        d = self._diameter
+        r = d / 2
+
+        # Outer shadow ring
+        p.setBrush(QBrush(QColor(0, 0, 0, 60)))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawEllipse(2, 2, d - 2, d - 2)
+
+        # Solid chip face
+        p.setBrush(QBrush(self._bg))
+        p.setPen(QPen(QColor(0, 0, 0, 80), 1))
+        p.drawEllipse(1, 1, d - 2, d - 2)
+
+        # Dashed inner ring (classic chip decoration)
+        pen = QPen(self._fg, max(1, d // 18), Qt.PenStyle.DashLine)
+        pen.setDashPattern([2, 2])
+        p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        inset = d * 0.14
+        p.drawEllipse(
+            QRectF(inset, inset, d - 2 * inset, d - 2 * inset)
+        )
+
+        # Denomination text
+        text  = f"${self._denom}" if self._denom < 1000 else f"${self._denom // 1000}K"
+        fsize = max(6, int(d * 0.24))
+        p.setPen(QPen(self._fg))
+        p.setFont(QFont("Arial", fsize, QFont.Weight.Black))
+        p.drawText(QRect(0, 0, d, d), Qt.AlignmentFlag.AlignCenter, text)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 6.  Sweep flash overlay
 # ─────────────────────────────────────────────────────────────────────────────
 
 class SweepFlashOverlay(QWidget):
@@ -276,9 +352,11 @@ class SweepFlashOverlay(QWidget):
             self.setGeometry(self.parent().rect())  # type: ignore[union-attr]
 
     def resizeEvent(self, _event) -> None:
+        """Resize the overlay to always fill the parent widget."""
         self._fit_to_parent()
 
     def paintEvent(self, _event) -> None:
+        """Draw the dimmed backdrop and "SWEEP!" announcement text."""
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         w, h = self.width(), self.height()
@@ -323,7 +401,7 @@ class SweepFlashOverlay(QWidget):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 5.  Round / game-over result overlay
+# 7.  Round / game-over result overlay
 # ─────────────────────────────────────────────────────────────────────────────
 
 class RoundResultOverlay(QDialog):
@@ -411,6 +489,7 @@ class _PaintedBanner(QWidget):
         self.setFixedHeight(72)
 
     def paintEvent(self, _event) -> None:
+        """Draw the gradient header banner with the round/game-over title."""
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         w, h = self.width(), self.height()
@@ -443,6 +522,7 @@ class _ScoreRow(QWidget):
         self.setFixedHeight(38)
 
     def paintEvent(self, _event) -> None:
+        """Draw the score row with rank, player name, sweep stars, and point total."""
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         w, h = self.width(), self.height()
@@ -492,7 +572,7 @@ class _ScoreRow(QWidget):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 6.  Point toast overlay  — compact non-blocking banner for notable captures
+# 8.  Point toast overlay  — compact non-blocking banner for notable captures
 # ─────────────────────────────────────────────────────────────────────────────
 
 class PointToastOverlay(QWidget):
@@ -579,9 +659,11 @@ class PointToastOverlay(QWidget):
             self.setGeometry(x, y, width, height)
 
     def resizeEvent(self, _event) -> None:
+        """Reposition the toast banner when the parent widget is resized."""
         self._fit_to_parent()
 
     def paintEvent(self, _event) -> None:
+        """Draw the toast background, accent stripe, title, and subtitle text."""
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         w, h = self.width(), self.height()

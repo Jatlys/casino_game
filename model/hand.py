@@ -16,10 +16,12 @@ class Hand:
 
     @property
     def cards(self) -> list[Card]:
+        """Return a copy of the cards currently in this hand."""
         return list(self._cards)
 
     @property
     def owner(self) -> str:
+        """Name of the player who holds this hand."""
         return self._owner
 
     # Mutation methods
@@ -47,6 +49,27 @@ class Hand:
     def get_value(self) -> int:
         """Return the sum of hand_value() for every card in the hand."""
         return sum(card.hand_value() for card in self._cards)
+
+    def blackjack_value(self) -> int:
+        """Return the Blackjack total for this hand.
+
+        Aces count as 11; each Ace is demoted to 1 as needed to avoid bust.
+        Face cards (J, Q, K) count as 10.
+        """
+        total = 0
+        aces = 0
+        for card in self._cards:
+            if card.rank == "A":
+                total += 11
+                aces += 1
+            elif card.rank in ("J", "Q", "K"):
+                total += 10
+            else:
+                total += int(card.rank)
+        while total > 21 and aces:
+            total -= 10
+            aces -= 1
+        return total
 
     def is_empty(self) -> bool:
         """Return True when the hand contains no cards."""

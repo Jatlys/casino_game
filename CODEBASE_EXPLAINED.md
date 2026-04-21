@@ -8,19 +8,24 @@
    - [Deck](#32-deck)
    - [Hand](#33-hand)
    - [Player](#34-player)
-   - [CasinoTakeAlgorithm](#35-casinotakealgorithm)
-   - [DeckCasinoGame](#36-deckcasinogame)
-   - [AIOpponent](#37-aiopponent)
-   - [FileManager](#38-filemanager)
+   - [BettingSystem](#35-bettingsystem)
+   - [CasinoTakeAlgorithm](#36-casinotakealgorithm)
+   - [DeckCasinoGame](#37-deckcasinogame)
+   - [AIOpponent](#38-aiopponent)
+   - [BlackjackGame](#39-blackjackgame)
+   - [BaccaratGame](#310-baccaratgame)
+   - [FileManager](#311-filemanager)
 4. [Controller Layer](#4-controller-layer)
 5. [View Layer](#5-view-layer)
    - [CardWidget](#51-cardwidget)
    - [DeckCasinoView](#52-deckcasinoview)
    - [MainWindow](#53-mainwindow)
    - [LobbyView](#54-lobbyview)
-   - [DeckCasinoInstructionsDialog](#55-deckcasinoinstructionsdialog)
-   - [DrawnAssets](#56-drawnassets)
-   - [PlayerBadgeWidget](#57-playerbadgewidget)
+   - [BlackjackView](#55-blackjackview)
+   - [BaccaratView](#56-baccaratview)
+   - [DeckCasinoInstructionsDialog](#57-deckcasinoinstructionsdialog)
+   - [DrawnAssets](#58-drawnassets)
+   - [PlayerBadgeWidget](#59-playerbadgewidget)
 6. [Entry Point](#6-entry-point)
 7. [Data Flow: A Complete Turn](#7-data-flow-a-complete-turn)
 
@@ -93,15 +98,20 @@ main.py
         ├── model/
         │     ├── card.py               (Data: a single card, dual-value design)
         │     ├── deck.py               (Data: 52-card draw pile)
-        │     ├── hand.py               (Data: a player's held cards)
-        │     ├── player.py             (Data: player state — hand, collection, score, AI flag)
+        │     ├── hand.py               (Data: a player's held cards, incl. Blackjack value)
+        │     ├── player.py             (Data: player state — hand, collection, score, bankroll)
+        │     ├── betting_system.py     (Logic: bet validation + payout calc for BJ/Baccarat)
         │     ├── casino_take_algorithm.py  (Logic: validates and finds valid takes)
-        │     ├── deck_casino_game.py   (Logic: full game loop and scoring)
-        │     ├── ai_opponent.py        (Logic: AI decision-making, 3 difficulty levels)
+        │     ├── deck_casino_game.py   (Logic: full Deck Casino game loop and scoring)
+        │     ├── blackjack_game.py     (Logic: Blackjack round — hit/stand/double/split + AIDealer)
+        │     ├── baccarat_game.py      (Logic: Punto Banco Baccarat round + third-card rules)
+        │     ├── ai_opponent.py        (Logic: Deck Casino AI, 3 difficulty levels)
         │     └── file_manager.py       (Persistence: save/load JSON, move history)
         └── view/
-              ├── lobby_view.py             (UI: game selection screen)
-              ├── deck_casino_view.py       (UI: table, hand, action buttons)
+              ├── lobby_view.py             (UI: game selection screen — all 3 games wired)
+              ├── deck_casino_view.py       (UI: Deck Casino table, hand, action buttons)
+              ├── blackjack_view.py         (UI: Blackjack table with betting panel)
+              ├── baccarat_view.py          (UI: Baccarat Punto vs Banco layout)
               ├── card_widget.py            (UI: renders a single card with QPainter)
               ├── player_badge_widget.py    (UI: score badge per player in the score row)
               ├── drawn_assets.py           (UI: shared QPainter assets and overlay widgets)
@@ -110,7 +120,7 @@ main.py
                     └── deck_casino.py      (UI: tabbed How-to-Play dialog)
 ```
 
-**Key design principle:** The model knows nothing about the UI. The view knows nothing about game logic. `MainWindow` connects them by listening to view signals and calling model methods.
+**Key design principle:** The model knows nothing about the UI. The view knows nothing about game logic. [`MainWindow`](view/main_window.py#L322) connects them by listening to view signals and calling model methods.
 
 ---
 
@@ -119,92 +129,140 @@ main.py
 ### 3.1 `Card`
 **File:** [model/card.py](model/card.py)
 
-Represents a single immutable playing card. The central design decision is the **dual-value system**.
+Represents a single immutable playing card ([`Card`](model/card.py#L10)). The central design decision is the **dual-value system**.
 
 ```
 Card(suit, rank)
 ```
 
-**`hand_value()`** — value used when this card is **played from the hand** (the target sum for takes):
+**[`hand_value()`](model/card.py#L44)** — value used when this card is **played from the hand** (the target sum for takes):
 - Ace → 14
 - Diamond-10 → 16
 - Spade-2 → 15
 - J/Q/K → 11/12/13
 - All others → face value (int)
 
-**`table_value()`** — value used when this card **sits on the table** (used in subset-sum checks):
+**[`table_value()`](model/card.py#L56)** — value used when this card **sits on the table** (used in subset-sum checks):
 - Ace → 1
 - All others (including Diamond-10 and Spade-2) → face value
 
-**`is_special()`** — returns `True` for Ace, Diamond-10, Spade-2. Used by the view to draw a gold border.
+**[`is_special()`](model/card.py#L65)** — returns `True` for Ace, Diamond-10, Spade-2. Used by the view to draw a gold border.
 
-`Card` implements `__eq__` and `__hash__` based on `(suit, rank)`, so cards can safely be stored in sets and used as frozenset members.
+`Card` implements [`__eq__`](model/card.py#L83) and [`__hash__`](model/card.py#L88) based on `(suit, rank)`, so cards can safely be stored in sets and used as frozenset members.
 
 ---
 
 ### 3.2 `Deck`
 **File:** [model/deck.py](model/deck.py)
 
-Creates all 52 unique `Card` objects (4 suits x 13 ranks) on construction. Internally a list where **the end of the list is the "top"** of the deck.
+[`Deck`](model/deck.py#L6) creates all 52 unique `Card` objects (4 suits x 13 ranks) on construction. Internally a list where **the end of the list is the "top"** of the deck.
 
-**`shuffle()`** — shuffles the internal list in place using `random.shuffle`.
+**[`shuffle()`](model/deck.py#L32)** — shuffles the internal list in place using `random.shuffle`.
 
-**`deal(n)`** — pops `n` cards from the end of the list and returns them. Raises `ValueError` if fewer than `n` cards remain.
+**[`deal(n)`](model/deck.py#L36)** — pops `n` cards from the end of the list and returns them. Raises `ValueError` if fewer than `n` cards remain.
 
-**`is_empty()`** — returns `True` when no cards remain.
+**[`is_empty()`](model/deck.py#L53)** — returns `True` when no cards remain.
 
-**`__len__()`** — returns the current number of remaining cards (used by the view to display the stock count).
+**[`__len__()`](model/deck.py#L59)** — returns the current number of remaining cards (used by the view to display the stock count).
 
 ---
 
 ### 3.3 `Hand`
 **File:** [model/hand.py](model/hand.py)
 
-A simple ordered list of `Card` objects belonging to one participant.
+[`Hand`](model/hand.py#L4) is a simple ordered list of `Card` objects belonging to one participant. Used by all three games.
 
-**`add_card(card)`** — appends a card.
+**[`add_card(card)`](model/hand.py#L27)** — appends a card.
 
-**`remove_card(card)`** — removes a specific card; raises `ValueError` if it is not present.
+**[`remove_card(card)`](model/hand.py#L31)** — removes a specific card; raises `ValueError` if it is not present.
 
-**`is_empty()`** — returns `True` when no cards remain.
+**[`card_count()`](model/hand.py#L43)** — returns the number of cards currently in the hand.
 
-**`get_value()`** — sums `hand_value()` for every card in the hand (used for informational display only; not used in game logic directly).
+**[`is_empty()`](model/hand.py#L72)** — returns `True` when no cards remain.
+
+**[`get_value()`](model/hand.py#L47)** — sums `hand_value()` for every card (Deck Casino; informational only).
+
+**[`blackjack_value()`](model/hand.py#L51)** — returns the Blackjack total. Aces count as 11 and are demoted to 1 as needed to avoid bust. Face cards (J, Q, K) count as 10. Used by `BlackjackGame` and `AIDealer`.
 
 ---
 
 ### 3.4 `Player`
 **File:** [model/player.py](model/player.py)
 
-Tracks everything about a single participant across rounds. Supports both human and AI players.
+[`Player`](model/player.py#L5) tracks everything about a single participant across rounds. Supports both human and AI players, and is shared across all three games.
 
 ```python
-Player(name, is_ai=False, difficulty="hard")
+Player(name, is_ai=False, difficulty="hard", bankroll=1000)
 ```
 
 **State:**
-- `hand` — a `Hand` instance (the 4 cards currently held)
-- `_collection` — list of `Card` objects taken this round
-- `_sweeps` — number of sweeps scored this round
-- `_total_score` — cumulative score across all rounds (persists between rounds)
+- `hand` — a `Hand` instance (the cards currently held)
+- `_collection` — list of `Card` objects taken this round (Deck Casino only)
+- `_sweeps` — number of sweeps scored this round (Deck Casino only)
+- `_total_score` — cumulative score across all rounds (Deck Casino only)
+- `_bankroll` — chip count for Blackjack and Baccarat (starts at $1000 by default)
 - `_is_ai` — `True` if this player is controlled by `AIOpponent`
 - `_difficulty` — `"easy"`, `"medium"`, or `"hard"` (AI only; ignored for humans)
 
-**`add_to_collection(cards)`** — adds one card or a list of cards to the collection.
+**Deck Casino methods:**
 
-**`add_sweep()`** — increments the sweep counter.
+**[`add_to_collection(cards)`](model/player.py#L78)** — adds one card or a list of cards to the collection.
 
-**`add_score(points)`** — adds points to the cumulative total.
+**[`add_sweep()`](model/player.py#L89)** — increments the sweep counter.
 
-**`reset_for_round()`** — clears the hand, collection, and sweeps. **Does not reset `total_score`**, because that persists across rounds.
+**[`add_score(points)`](model/player.py#L85)** — adds points to the cumulative total.
+
+**[`reset_for_round()`](model/player.py#L95)** — clears the hand, collection, and sweeps. Does **not** reset `total_score` or `bankroll`.
+
+**Bankroll methods (Blackjack / Baccarat):**
+
+**[`place_bet(amount)`](model/player.py#L57)** — deducts the bet from `_bankroll`. Raises `ValueError` if `amount <= 0` or exceeds the bankroll.
+
+**[`win(payout)`](model/player.py#L69)** — credits a payout (returned stake + winnings) to `_bankroll`.
+
+**[`lose()`](model/player.py#L73)** — no-op; bankroll was already reduced by `place_bet()`.
 
 ---
 
-### 3.5 `CasinoTakeAlgorithm`
+### 3.5 `BettingSystem`
+**File:** [model/betting_system.py](model/betting_system.py)
+
+[`BettingSystem`](model/betting_system.py#L1) validates bets and calculates payouts for Blackjack and Baccarat. All methods are `@staticmethod` — no state.
+
+#### [`validate_bet(bet, bankroll)`](model/betting_system.py#L25)
+Raises `ValueError` if `bet <= 0` or `bet > bankroll`. Called before deducting the stake.
+
+#### [`calculate_payout(bet, outcome, game_type, bet_type=None)`](model/betting_system.py#L45) `→ int`
+Returns the total integer amount to credit back to the bankroll (includes the returned stake on a win or push). Delegates to [`_blackjack_payout`](model/betting_system.py#L74) or [`_baccarat_payout`](model/betting_system.py#L84).
+
+**Blackjack payouts (`game_type="blackjack"`):**
+
+| Outcome   | Payout             |
+|-----------|--------------------|
+| `natural` | `int(bet * 2.5)` (1.5:1) |
+| `win`     | `bet * 2` (1:1)    |
+| `push`    | `bet` (stake returned) |
+| `bust` / `lose` | `0`         |
+
+**Baccarat payouts (`game_type="baccarat"`, requires `bet_type`):**
+
+| Outcome      | `bet_type` | Payout                   |
+|--------------|------------|--------------------------|
+| `tie`        | `"tie"`    | `bet * 9` (8:1)          |
+| `tie`        | anything else | `bet` (push — stake returned) |
+| `punto_win`  | `"punto"`  | `bet * 2` (1:1)          |
+| `punto_win`  | other      | `0`                      |
+| `banco_win`  | `"banco"`  | `int(bet * 1.95)` (5% commission) |
+| `banco_win`  | other      | `0`                      |
+
+---
+
+### 3.6 `CasinoTakeAlgorithm`
 **File:** [model/casino_take_algorithm.py](model/casino_take_algorithm.py)
 
-The core game logic for validating and discovering takes. All methods are `@staticmethod` — this class has no state.
+[`CasinoTakeAlgorithm`](model/casino_take_algorithm.py#L4) is the core game logic for validating and discovering takes. All methods are `@staticmethod` — this class has no state.
 
-#### `get_valid_takes(played_card, table_cards)`
+#### [`get_valid_takes(played_card, table_cards)`](model/casino_take_algorithm.py#L13)
 Finds every non-empty subset of `table_cards` whose `table_value()` sum equals `played_card.hand_value()`. Uses `itertools.combinations` to iterate over all subsets of size 1 through `len(table_cards)`. Returns a list of `frozenset` objects.
 
 ```python
@@ -217,15 +275,15 @@ for r in range(1, len(table_cards) + 1):
 
 This is a brute-force subset-sum search — acceptable because there are at most ~8-12 table cards in practice.
 
-#### `is_valid_take(played_card, chosen_cards, table_cards)`
+#### [`is_valid_take(played_card, chosen_cards, table_cards)`](model/casino_take_algorithm.py#L37)
 Validates that the player's chosen set of cards is a legal take. A chosen set is valid if:
 1. It is non-empty.
 2. It is a subset of the actual table cards.
 3. It can be **partitioned** into one or more non-overlapping valid subsets (each summing to `hand_value()`).
 
-Step 3 delegates to `_can_cover`.
+Step 3 delegates to [`_can_cover`](model/casino_take_algorithm.py#L92).
 
-#### `_can_cover(remaining, valid_subsets)`
+#### [`_can_cover(remaining, valid_subsets)`](model/casino_take_algorithm.py#L92)
 A **recursive backtracking** algorithm. It checks if `remaining` (the set of chosen cards) can be completely covered by selecting non-overlapping subsets from `valid_subsets`.
 
 ```
@@ -240,41 +298,41 @@ This correctly handles the multi-group take rule (e.g., playing J=11 and taking 
 
 ---
 
-### 3.6 `DeckCasinoGame`
+### 3.7 `DeckCasinoGame`
 **File:** [model/deck_casino_game.py](model/deck_casino_game.py)
 
-The **game loop**. Owns the deck, table cards, player list, and turn tracking.
+[`DeckCasinoGame`](model/deck_casino_game.py#L7) is the **game loop**. Owns the deck, table cards, player list, and turn tracking.
 
-**`start_game()`** — resets and runs setup:
+**[`start_game()`](model/deck_casino_game.py#L33)** — resets and runs setup:
 1. Creates a fresh `Deck` and shuffles it.
 2. Deals 4 cards to the table.
 3. Calls `player.reset_for_round()` for each player, then deals 4 cards to each hand.
 4. Resets `_last_taker` and `_turn_index`.
 
-**`play_card(card, take)`** — executes the current player's turn:
+**[`play_card(card, take)`](model/deck_casino_game.py#L47)** — executes the current player's turn:
 1. Verifies `card` is in the current player's hand; removes it.
 2. **If `take` is not None (taking):**
    - Calls `CasinoTakeAlgorithm.is_valid_take()` — raises `ValueError` if invalid.
    - Removes taken cards from `_table_cards`.
    - Adds `[card] + list(take)` to the player's collection.
    - Records the current player as `_last_taker`.
-   - Calls `check_sweep()`.
+   - Calls [`check_sweep()`](model/deck_casino_game.py#L84).
 3. **If `take` is None (placing):**
    - Appends the card to `_table_cards`.
 4. Draws one card from stock into the player's hand (if stock is not empty).
-5. Calls `advance_turn()`.
+5. Calls [`advance_turn()`](model/deck_casino_game.py#L89).
 
-**`check_sweep()`** — if `_table_cards` is empty, calls `current_player.add_sweep()`.
+**[`check_sweep()`](model/deck_casino_game.py#L84)** — if `_table_cards` is empty, calls `current_player.add_sweep()`.
 
-**`advance_turn()`** — increments `_turn_index` modulo the number of players (wraps around).
+**[`advance_turn()`](model/deck_casino_game.py#L89)** — increments `_turn_index` modulo the number of players (wraps around).
 
-**`is_round_over()`** — returns `True` when the stock is empty and every player's hand is empty.
+**[`is_round_over()`](model/deck_casino_game.py#L95)** — returns `True` when the stock is empty and every player's hand is empty.
 
-**`end_round()`** — finalises the round:
+**[`end_round()`](model/deck_casino_game.py#L101)** — finalises the round:
 1. Gives any remaining table cards to `_last_taker`.
-2. Calls `calculate_scores()`.
+2. Calls [`calculate_scores()`](model/deck_casino_game.py#L108).
 
-**`calculate_scores()`** — awards points to each player in this order:
+**[`calculate_scores()`](model/deck_casino_game.py#L108)** — awards points to each player in this order:
 1. Sweeps: `player.sweeps` points per player.
 2. Aces: 1 point per Ace in each player's collection.
 3. Most cards: 1 point to the player with the most collected cards (no award on a tie).
@@ -282,31 +340,31 @@ The **game loop**. Owns the deck, table cards, player list, and turn tracking.
 5. Diamond-10 holder: 2 points.
 6. Spade-2 holder: 1 point.
 
-**`has_winner()`** — returns `True` if any player's `total_score >= 16`.
+**[`has_winner()`](model/deck_casino_game.py#L146)** — returns `True` if any player's `total_score >= 16`.
 
 ---
 
-### 3.7 `AIOpponent`
+### 3.8 `AIOpponent`
 **File:** [model/ai_opponent.py](model/ai_opponent.py)
 
-Stateless AI decision-maker. All methods are `@staticmethod`. Called by `MainWindow._after_deck_casino_action()` for every AI player's turn.
+[`AIOpponent`](model/ai_opponent.py#L8) is a stateless AI decision-maker for Deck Casino. All methods are `@staticmethod`. Called by [`_after_deck_casino_action()`](view/main_window.py#L560) for every AI player's turn.
 
 ```python
 AIOpponent.decide_action(game, difficulty) → (Card, frozenset | None)
 ```
 
-Returns `(card_to_play, take)` where `take=None` means place the card.
+[`decide_action()`](model/ai_opponent.py#L20) returns `(card_to_play, take)` where `take=None` means place the card.
 
 #### Three difficulty levels
 
-**Easy** (`_decide_easy`) — picks any random valid take, or places a random card. No strategy.
+**[`_decide_easy`](model/ai_opponent.py#L42)** — picks any random valid take, or places a random card. No strategy.
 
-**Medium** (`_decide_medium`) — applies three priorities:
+**[`_decide_medium`](model/ai_opponent.py#L62)** — applies three priorities:
 1. Sweep the table if possible.
 2. Maximise the number of cards taken.
 3. Place the card with the lowest hand value.
 
-**Hard** (`_decide_hard`) — full six-priority strategy:
+**[`_decide_hard`](model/ai_opponent.py#L98)** — full six-priority strategy:
 1. **Sweep** — take all table cards if possible (using the least-valuable hand card).
 2. **Prize capture** — take Diamond-10 or Spade-2 from the table.
 3. **Maximise count** — take the largest group of cards.
@@ -316,18 +374,88 @@ Returns `(card_to_play, take)` where `take=None` means place the card.
 
 #### Placement safety helpers
 
-**`_choose_placement(hand_cards, table)`** — sorts candidates by hand value; returns the first one that does not enable a sweep, or the lowest-value card if all would enable one.
+**[`_choose_placement(hand_cards, table)`](model/ai_opponent.py#L153)** — sorts candidates by hand value; returns the first one that does not enable a sweep, or the lowest-value card if all would enable one.
 
-**`_placement_enables_sweep(card, table)`** — returns `True` if adding `card` to the table would allow any hand value (2–16) to sweep the whole table.
+**[`_placement_enables_sweep(card, table)`](model/ai_opponent.py#L164)** — returns `True` if adding `card` to the table would allow any hand value (2–16) to sweep the whole table.
 
-**`_sweepable_by_value(hand_value, table)`** — checks whether a single card with `hand_value` could legally take every card currently on the table, using `_can_cover`.
+**[`_sweepable_by_value(hand_value, table)`](model/ai_opponent.py#L173)** — checks whether a single card with `hand_value` could legally take every card currently on the table, using `_can_cover`.
 
 ---
 
-### 3.8 `FileManager`
+### 3.9 `BlackjackGame`
+**File:** [model/blackjack_game.py](model/blackjack_game.py)
+
+[`BlackjackGame`](model/blackjack_game.py#L75) handles one round of Blackjack: a single human `Player` vs. the [`AIDealer`](model/blackjack_game.py#L12). Supports split hands.
+
+#### Phases
+
+| Phase      | Meaning                                                   |
+|------------|-----------------------------------------------------------|
+| `"betting"` | Waiting for `start_round(bet)` call                      |
+| `"player"` | Player acts (hit / stand / double_down / split)           |
+| `"dealer"` | Dealer auto-plays after all player hands are settled      |
+| `"done"`   | Round over; call `get_results()` then `settle_bets()`     |
+
+#### Split support
+- `_hands` — list of `Hand` objects (length > 1 after a split).
+- `_bets` — mirrors `_hands` with the bet amount for each hand.
+- `_current_hand_index` — points to the hand currently being played.
+
+#### Key methods
+
+**[`start_round(bet, deck=None)`](model/blackjack_game.py#L138)** — validates and deducts the bet via `BettingSystem`, shuffles a fresh deck, deals 2 cards each to the player and dealer. If the player has a natural 21, jumps straight to the dealer phase.
+
+**[`hit()`](model/blackjack_game.py#L177)** — draws one card to the current hand; advances past it automatically on bust.
+
+**[`stand()`](model/blackjack_game.py#L188)** — stands on the current hand and moves to the next (or dealer phase).
+
+**[`double_down()`](model/blackjack_game.py#L197)** — doubles the bet, draws exactly one card, then stands. Only allowed on the first two cards if the player has sufficient bankroll.
+
+**[`split()`](model/blackjack_game.py#L215)** — splits a 2-card same-rank hand into two hands, each with the original bet. Each new hand gets one additional card from the deck. Requires sufficient bankroll.
+
+**[`get_results()`](model/blackjack_game.py#L249) `→ list[dict]`** — returns one result dict per hand with keys `hand_index`, `player_value`, `dealer_value`, `outcome` (`"natural"` | `"win"` | `"push"` | `"bust"` | `"lose"`), and `payout`.
+
+**[`settle_bets()`](model/blackjack_game.py#L292)** — credits each hand's payout to `player.bankroll` via `player.win()`.
+
+#### [`AIDealer`](model/blackjack_game.py#L12)
+Inner class (same file). Dealer hits on any total < 17 and stands on 17+.
+
+**[`should_hit(hand)`](model/blackjack_game.py#L66)** — returns `True` if `hand.blackjack_value() < 17`.
+
+**[`basic_strategy_action(player_total, dealer_upcard)`](model/blackjack_game.py#L51)** — returns the canonical basic-strategy recommendation (`"hit"` | `"stand"` | `"double"`) for a given hard total vs. dealer upcard. The strategy table is built lazily on first call via [`_build_strategy()`](model/blackjack_game.py#L28).
+
+---
+
+### 3.10 `BaccaratGame`
+**File:** [model/baccarat_game.py](model/baccarat_game.py)
+
+[`BaccaratGame`](model/baccarat_game.py#L25) handles one round of Punto Banco Baccarat. Fully deterministic once cards are dealt — no player decisions after betting.
+
+#### Flow
+
+1. [`start_round(bet, bet_type, deck=None)`](model/baccarat_game.py#L95) — validates and deducts the bet, deals 2 cards each to Punto and Banco. Sets `natural=True` and phase to `"done"` immediately if either side totals 8 or 9.
+2. [`draw_third_card()`](model/baccarat_game.py#L142) — applies the standard third-card rule table (only callable in phase `"drawing"`).
+3. [`get_result()`](model/baccarat_game.py#L184) — determines winner and payout; returns a dict.
+4. [`settle_bet()`](model/baccarat_game.py#L218) — credits the payout to `player.bankroll`.
+
+#### Bet types
+`"punto"` | `"banco"` | `"tie"`
+
+#### Card values
+- Ace = 1, 2–9 = face value, 10/J/Q/K = 0. Hand total = sum mod 10 (see [`_baccarat_hand_total`](model/baccarat_game.py#L20)).
+
+#### Third-card rules
+- **Punto** draws if total 0–5; stands on 6 or 7.
+- **Banco** draws according to the standard rule table ([`_banco_draws`](model/baccarat_game.py#L228)) keyed on Banco's current total and Punto's third card value (if Punto drew).
+
+**[`get_result()`](model/baccarat_game.py#L184) `→ dict`** — keys: `punto_total`, `banco_total`, `outcome` (`"punto_win"` | `"banco_win"` | `"tie"`), `natural`, `payout`.
+
+---
+
+### 3.11 `FileManager`
 **File:** [model/file_manager.py](model/file_manager.py)
 
-Handles JSON serialization of the full game state and per-move history. All methods are `@staticmethod`. The save file is `save_data.json` in the working directory.
+[`FileManager`](model/file_manager.py#L14) handles JSON serialization of the full Deck Casino game state and per-move history. All methods are `@staticmethod`. Save files are named per [`slot_filename(player_names)`](model/file_manager.py#L52) — keyed by the player roster so each lineup has its own file.
 
 #### Save format
 ```json
@@ -350,13 +478,13 @@ Handles JSON serialization of the full game state and per-move history. All meth
 }
 ```
 
-**`save(game, move_history)`** — serializes the current `DeckCasinoGame` instance plus the move history list to `save_data.json`. Called after every action by `MainWindow`.
+**[`save(game, move_history, player_names=None)`](model/file_manager.py#L81)** — serializes the current `DeckCasinoGame` instance plus the move history list to a roster-keyed JSON file. Called after every action by `MainWindow`.
 
-**`load()`** — reads `save_data.json` if it exists and returns `(game, move_history)`, or `None` if no file is found.
+**[`load(player_names=None)`](model/file_manager.py#L119)** — reads the matching save file if it exists and returns `(game, move_history)`, or `None` if no file is found.
 
-**`restore(data)`** — reconstructs a `DeckCasinoGame` from a parsed JSON dict. Uses `object.__new__` to bypass `__init__` so no fresh game is started — all state is injected directly.
+**[`restore(data)`](model/file_manager.py#L138)** — reconstructs a `DeckCasinoGame` from a parsed JSON dict. Uses `object.__new__` to bypass `__init__` so no fresh game is started — all state is injected directly.
 
-**`record_move(player_name, played_card, take, table_before)`** — builds a move record dict including an automatically generated improvement tip:
+**[`record_move(player_name, played_card, take, table_before)`](model/file_manager.py#L180)** — builds a move record dict including an automatically generated improvement tip (via [`_generate_advice`](model/file_manager.py#L209)):
 - If placing when a take was available → suggests taking.
 - If a sweep was missed → flags it.
 - If special cards were captured → acknowledges it.
@@ -369,13 +497,13 @@ Handles JSON serialization of the full game state and per-move history. All meth
 ### `GameManager`
 **File:** [controller/game_manager.py](controller/game_manager.py)
 
-A thin registry that holds the active game instance and player roster.
+[`GameManager`](controller/game_manager.py#L4) is a thin registry that holds the active game instance and player roster.
 
-**`set_players(players)`** — registers the player list.
+**[`set_players(players)`](controller/game_manager.py#L29)** — registers the player list.
 
-**`start_deck_casino(players)`** — instantiates `DeckCasinoGame`, calls `start_game()`, and stores the result in `_active_game`. The `MainWindow` then reads `active_game` to refresh the view.
+**[`start_deck_casino(players)`](controller/game_manager.py#L35)** — instantiates `DeckCasinoGame`, calls `start_game()`, and stores the result in `_active_game`. The `MainWindow` then reads `active_game` to refresh the view.
 
-`GameManager` is designed to eventually support multiple game types (Blackjack, Baccarat), which is why it uses a generic `_active_game` attribute rather than a game-specific one.
+`GameManager` is designed to support multiple game types (Blackjack, Baccarat), which is why it uses a generic `_active_game` attribute rather than a game-specific one. Blackjack and Baccarat games are launched directly by `MainWindow` without going through `GameManager`.
 
 ---
 
@@ -386,38 +514,38 @@ All views use **PyQt6**. No external image files are used — all card and UI ar
 ### 5.1 `CardWidget`
 **File:** [view/card_widget.py](view/card_widget.py)
 
-Renders a single card as a 70x98 pixel widget (standard 1:1.4 poker card ratio).
+[`CardWidget`](view/card_widget.py#L24) renders a single card as a 70x98 pixel widget (standard 1:1.4 poker card ratio).
 
 **Three rendering modes** (controlled by `_card` and `_face_down`):
 - `card=None, face_down=False` → dashed placeholder slot
 - `face_down=True` → blue card back with white inner border
 - `card set, face_down=False` → card face
 
-**`_draw_face()`** draws:
+**[`_draw_face()`](view/card_widget.py#L108)** draws:
 1. White rounded rectangle background.
 2. Rank and suit symbol in the top-left (small font).
 3. Large suit symbol centred.
 4. Rank and suit in the bottom-right (rotated 180°).
 5. A **gold border** if `card.is_special()` is `True`.
-6. A **hint badge** (top-right, shows `hand_value()`) when hint mode is active.
+6. A **hint badge** (top-right, shows `hand_value()`) when hint mode is active — drawn by [`_draw_hint_badge()`](view/card_widget.py#L147).
 
-**`set_selected(bool)`** — triggers a repaint; a blue border is drawn over the card when selected.
+**[`set_selected(bool)`](view/card_widget.py#L58)** — triggers a repaint; a blue border is drawn over the card when selected.
 
-**`set_hint_mode(bool)`** — class-level flag, so toggling hint mode affects all `CardWidget` instances simultaneously.
+**[`set_hint_mode(bool)`](view/card_widget.py#L38)** — class-level flag, so toggling hint mode affects all `CardWidget` instances simultaneously.
 
-**`clicked` signal** — emitted on `mousePressEvent`; wired up by the parent view.
+**`clicked` signal** — emitted on [`mousePressEvent`](view/card_widget.py#L65); wired up by the parent view.
 
 ---
 
 ### 5.2 `DeckCasinoView`
 **File:** [view/deck_casino_view.py](view/deck_casino_view.py)
 
-The main game table UI. Manages card selection state and emits signals to `MainWindow` when the player acts.
+[`DeckCasinoView`](view/deck_casino_view.py#L43) is the main Deck Casino game table UI. Manages card selection state and emits signals to `MainWindow` when the player acts.
 
 **Layout (top to bottom):**
 - Title bar with current player's name
 - Score row — one `PlayerBadgeWidget` per player + stock count label
-- `TableZoneWidget` — green felt area containing table `CardWidget`s
+- [`TableZoneWidget`](view/deck_casino_view.py#L17) — green felt area containing table `CardWidget`s
 - Hand zone — current player's hand cards
 - Tutorial overlay (hidden by default)
 - Action button row: Lobby | How to Play | Hint Mode | Place Card | Take Cards
@@ -426,76 +554,143 @@ The main game table UI. Manages card selection state and emits signals to `MainW
 - `_selected_hand_card` — the one hand card currently selected (at most one at a time)
 - `_selected_table_cards` — a `set` of table cards currently selected (can be multiple)
 
-**`refresh(game)`** — called after every action; rebuilds the entire view from the current game state (no partial updates). Clears all selections.
+**[`refresh(game)`](view/deck_casino_view.py#L165)** — called after every action; rebuilds the entire view from the current game state (no partial updates). Clears all selections.
 
-**`show_sweep_flash(player_name, hint_text)`** — delegates to `SweepFlashOverlay.flash()`. Called by `MainWindow` when a sweep is detected.
+**[`show_sweep_flash(player_name, hint_text)`](view/deck_casino_view.py#L190)** — delegates to `SweepFlashOverlay.flash()`. Called by `MainWindow` when a sweep is detected.
 
-**`show_point_toast(title, subtitle, accent)`** — delegates to `PointToastOverlay.show_event()`. Called by `MainWindow` when a notable card (Ace, Diamond-10, Spade-2) is captured.
+**[`show_point_toast(title, subtitle, accent)`](view/deck_casino_view.py#L194)** — delegates to `PointToastOverlay.show_event()`. Called by `MainWindow` when a notable card (Ace, Diamond-10, Spade-2) is captured.
 
-**`is_hint_mode`** — property; `True` when the Hint Mode button is toggled on.
+**[`is_hint_mode`](view/deck_casino_view.py#L186)** — property; `True` when the Hint Mode button is toggled on.
 
 **Interaction flow:**
-1. `_on_hand_card_clicked()` — sets `_selected_hand_card`; clears table selection.
-2. `_on_table_card_clicked()` — toggles a table card in/out of `_selected_table_cards` (only if a hand card is already selected).
-3. `_update_buttons()` — enables/disables "Take Cards" and "Place Card" based on selection state.
-4. `_on_take_clicked()` — emits `take_requested(hand_card, frozenset(table_cards))`.
-5. `_on_place_clicked()` — emits `place_requested(hand_card)`.
+1. [`_on_hand_card_clicked()`](view/deck_casino_view.py#L293) — sets `_selected_hand_card`; clears table selection.
+2. [`_on_table_card_clicked()`](view/deck_casino_view.py#L310) — toggles a table card in/out of `_selected_table_cards` (only if a hand card is already selected).
+3. [`_update_buttons()`](view/deck_casino_view.py#L332) — enables/disables "Take Cards" and "Place Card" based on selection state.
+4. [`_on_take_clicked()`](view/deck_casino_view.py#L321) — emits `take_requested(hand_card, frozenset(table_cards))`.
+5. [`_on_place_clicked()`](view/deck_casino_view.py#L328) — emits `place_requested(hand_card)`.
 
 These signals are received by `MainWindow`, which calls the model and then calls `refresh()` again.
 
-**`TableZoneWidget`** is a small helper widget that paints a dark-green rounded rectangle for the felt background.
+[`TableZoneWidget`](view/deck_casino_view.py#L17) is also imported by `BlackjackView` and `BaccaratView` for their card display zones.
 
 ---
 
 ### 5.3 `MainWindow`
 **File:** [view/main_window.py](view/main_window.py)
 
-The application shell and the primary **wiring point** between view signals and model methods. It is a `QMainWindow` with:
-- A persistent `SidebarWidget` on the left (player name, score, nav buttons).
+[`MainWindow`](view/main_window.py#L322) is the application shell and the primary **wiring point** between view signals and model methods. It is a `QMainWindow` with:
+- A persistent [`SidebarWidget`](view/main_window.py#L289) on the left (player name, score, nav buttons).
 - A `QStackedWidget` on the right that swaps between Lobby and game views.
-- A `_move_history` list that accumulates `FileManager.record_move()` dicts throughout the session.
+- A `_move_history` list that accumulates `FileManager.record_move()` dicts throughout the Deck Casino session.
 
-**Game launch flow (`_launch_deck_casino`):**
-1. Calls `FileManager.load()` — if a save exists, prompts the user to resume. If accepted, restores the game directly and skips setup.
-2. Shows `PlayerSetupDialog` — two-mode dialog:
+Four views are registered at startup: `LobbyView`, `DeckCasinoView`, `BlackjackView`, `BaccaratView`.
+
+**Game launch flow ([`_launch_deck_casino`](view/main_window.py#L420)):**
+1. Calls `FileManager.load(player_names)` — if a matching save exists, prompts the user to resume. If accepted, restores the game directly and skips setup.
+2. Shows [`PlayerSetupDialog`](view/main_window.py#L26) — two-mode dialog:
    - **Player vs Player**: choose 2–4 players, enter names.
    - **Player vs Computer**: enter your name, choose AI difficulty (Easy / Medium / Hard).
-3. Shows `TutorialModeDialog` — asks if the player wants a tutorial.
+3. Shows [`TutorialModeDialog`](view/main_window.py#L253) — asks if the player wants a tutorial.
 4. Creates `Player` objects (with `is_ai=True` for the computer player), calls `game_manager.start_deck_casino(players)`.
 5. Calls `deck_casino_view.refresh(game)` and switches to the game view.
 6. If tutorial was selected, calls `deck_casino_view.start_tutorial()`.
 
-**Action handlers:**
-- `_on_deck_casino_take(card, take)` → records `table_before`, calls `game.play_card(card, take)`; shows a warning on `ValueError`; appends a move record; calls `_show_capture_events()`; calls `_after_deck_casino_action()`.
-- `_on_deck_casino_place(card)` → calls `game.play_card(card, None)`; appends a move record; calls `_after_deck_casino_action()`.
-- `_after_deck_casino_action()` → **auto-plays all consecutive AI turns** in a loop until the round is over or a human player's turn is reached. Also skips over any human whose hand is empty (deck exhausted). Then: checks if the round is over; if yes, calls `game.end_round()` and shows `RoundResultOverlay`. If there is a winner, returns to lobby. If no winner, starts a new round. Always calls `refresh()` and `FileManager.save()` to persist state.
+**[`_launch_blackjack()`](view/main_window.py#L460)** — prompts for a player name via `QInputDialog`, instantiates `BlackjackGame(player)`, and passes it to `BlackjackView.set_game()` before switching to that view.
 
-**`_show_capture_events(player, card, take, sweeps_before)`** — detects notable captures and triggers the appropriate overlays:
+**[`_launch_baccarat()`](view/main_window.py#L469)** — same pattern: prompts for a name, instantiates `BaccaratGame(player)`, passes it to `BaccaratView.set_game()`.
+
+**Deck Casino action handlers:**
+- [`_on_deck_casino_take(card, take)`](view/main_window.py#L533) → records `table_before`, calls `game.play_card(card, take)`; shows a warning on `ValueError`; appends a move record; calls `_show_capture_events()`; calls `_after_deck_casino_action()`.
+- [`_on_deck_casino_place(card)`](view/main_window.py#L550) → calls `game.play_card(card, None)`; appends a move record; calls `_after_deck_casino_action()`.
+- [`_after_deck_casino_action()`](view/main_window.py#L560) → **auto-plays all consecutive AI turns** in a loop until the round is over or a human player's turn is reached. Also skips over any human whose hand is empty (deck exhausted). Then: checks if the round is over; if yes, calls `game.end_round()` and shows `RoundResultOverlay`. If there is a winner, returns to lobby. If no winner, starts a new round. Always calls `refresh()` and `FileManager.save()` to persist state.
+
+**[`_show_capture_events(player, card, take, sweeps_before)`](view/main_window.py#L482)** — detects notable captures and triggers the appropriate overlays:
 - Sweep detected (player's sweep count increased) → calls `show_sweep_flash()`.
 - Aces, Diamond-10, or Spade-2 in the take → calls `show_point_toast()` with a descriptive title. Hint mode adds an explanatory subtitle.
 
 **Dialogs defined here:**
-- `PlayerSetupDialog` — two-mode form (PvP / PvC) with difficulty selection for AI.
-- `TutorialModeDialog` — Yes/No prompt for tutorial.
-- `SidebarWidget` — shows player name and score.
+- [`PlayerSetupDialog`](view/main_window.py#L26) — two-mode form (PvP / PvC) with difficulty selection for AI.
+- [`TutorialModeDialog`](view/main_window.py#L253) — Yes/No prompt for tutorial.
+- [`SidebarWidget`](view/main_window.py#L289) — shows player name and score.
 
 ---
 
 ### 5.4 `LobbyView`
 **File:** [view/lobby_view.py](view/lobby_view.py)
 
-The game selection screen. Shows three `GameBannerWidget`s (Deck Casino, Blackjack, Baccarat) in a row. Each banner is a `QWidget` with a QPainter-drawn coloured header and card-fan illustration.
+[`LobbyView`](view/lobby_view.py#L84) is the game selection screen. Shows three [`GameBannerWidget`](view/lobby_view.py#L9)s (Deck Casino, Blackjack, Baccarat) in a row. Each banner is a `QWidget` with a QPainter-drawn coloured header and card-fan illustration.
 
-Clicking "Play Deck Casino" emits `game_selected("Deck Casino")`, which is caught by `MainWindow._on_game_selected()`.
+All three banners are fully wired — clicking "Play Deck Casino / Blackjack / Baccarat" emits `game_selected("Deck Casino" | "Blackjack" | "Baccarat")`, which is caught by [`MainWindow._on_game_selected()`](view/main_window.py#L412).
 
-Blackjack and Baccarat banners are shown but not yet wired (planned for later weeks).
+| Game        | Header colour | Description shown               |
+|-------------|---------------|----------------------------------|
+| Deck Casino | Dark green    | Finnish card-taking game with AI opponent |
+| Blackjack   | Dark blue     | Beat the dealer to 21 without going bust |
+| Baccarat    | Dark purple   | Bet on Punto, Banco or Tie       |
 
 ---
 
-### 5.5 `DeckCasinoInstructionsDialog`
+### 5.5 `BlackjackView`
+**File:** [view/blackjack_view.py](view/blackjack_view.py)
+
+[`BlackjackView`](view/blackjack_view.py#L52) is the Blackjack game UI. Holds a `BlackjackGame` reference and drives it directly (no signals back to `MainWindow` for game actions). Emits `back_pressed` to return to the lobby.
+
+**Layout (top to bottom):**
+- Title bar with "← Lobby" button and bankroll display
+- Dealer zone — [`TableZoneWidget`](view/deck_casino_view.py#L17) with dealer cards; hole card shown face-down during player phase
+- Player zone — `TableZoneWidget` with player cards (active hand during player phase; all hands in dealer/done phase)
+- Result label — outcome and payout after round ends
+- Action buttons: Hit | Stand | Double Down | Split (enabled only in player phase)
+- Bottom row: [`BettingPanel`](view/blackjack_view.py#L13) (bet spinner + Deal button) | New Round button (visible only in done phase)
+
+**[`BettingPanel`](view/blackjack_view.py#L13)** (helper widget, same file) — shared with `BaccaratView`. Wraps a `QSpinBox` and a button into a horizontal row. Emits `bet_confirmed(int)`.
+
+**[`set_game(game)`](view/blackjack_view.py#L166)** — installs a new `BlackjackGame` and resets the view to betting state.
+
+**Interaction flow:**
+- "Deal" → [`_on_deal(bet)`](view/blackjack_view.py#L174) → `game.start_round(bet)` → `_settle_and_refresh()`
+- "Hit" → `game.hit()` → `_settle_and_refresh()`
+- "Stand" → `game.stand()` → `_settle_and_refresh()`
+- "Double Down" → `game.double_down()` → `_settle_and_refresh()`
+- "Split" → `game.split()` → `_settle_and_refresh()`
+- "New Round" → creates a fresh `BlackjackGame` with the same player (preserving bankroll)
+
+**[`_settle_and_refresh()`](view/blackjack_view.py#L227)** — calls `game.settle_bets()` once when phase reaches `"done"`, then calls [`refresh()`](view/blackjack_view.py#L233).
+
+**[`refresh()`](view/blackjack_view.py#L233)** — rebuilds the entire view from game state: dealer cards (hole card face-down in player phase, all revealed in dealer/done), player cards, value labels, button enable states, result text.
+
+---
+
+### 5.6 `BaccaratView`
+**File:** [view/baccarat_view.py](view/baccarat_view.py)
+
+[`BaccaratView`](view/baccarat_view.py#L15) is the Baccarat (Punto Banco) game UI. Holds a `BaccaratGame` reference. Emits `back_pressed` to return to the lobby. Third-card drawing is shown with a short `QTimer` delay for visual pacing.
+
+**Layout (top to bottom):**
+- Title bar with "← Lobby" button and bankroll display
+- Side-by-side hand zones: Punto (left) vs Banco (right), each with a `TableZoneWidget`
+- Result label — winner, totals, and payout
+- Bet type row — radio buttons: Punto (1:1) | Banco (0.95:1) | Tie (8:1)
+- Bottom row: [`BettingPanel`](view/blackjack_view.py#L13) (shared from `blackjack_view.py`) + New Round button
+
+**[`set_game(game)`](view/baccarat_view.py#L149)** — installs a new `BaccaratGame` and resets to betting state.
+
+**Interaction flow:**
+1. "Deal" → [`_on_deal(bet)`](view/baccarat_view.py#L156) → `game.start_round(bet, bet_type)`
+   - If natural: `QTimer(400ms)` → [`_finish_round()`](view/baccarat_view.py#L181)
+   - Otherwise: `QTimer(800ms)` → [`_draw_and_finish()`](view/baccarat_view.py#L174)
+2. [`_draw_and_finish()`](view/baccarat_view.py#L174) → `game.draw_third_card()` → `_refresh_hands()` → `QTimer(500ms)` → `_finish_round()`
+3. [`_finish_round()`](view/baccarat_view.py#L181) → `game.get_result()` → `game.settle_bet()` → updates bankroll label, shows result, highlights winner header
+4. "New Round" → creates a fresh `BaccaratGame` with the same player
+
+The background is painted dark purple (`#1a1a3a`) to distinguish Baccarat from Blackjack (dark green) and Deck Casino.
+
+---
+
+### 5.7 `DeckCasinoInstructionsDialog`
 **File:** [view/game_instructions/deck_casino.py](view/game_instructions/deck_casino.py)
 
-A `QDialog` with a `QTabWidget` containing five tabs of HTML content:
+[`DeckCasinoInstructionsDialog`](view/game_instructions/deck_casino.py#L256) is a `QDialog` with a `QTabWidget` containing five tabs of HTML content:
 
 | Tab              | Content                                   |
 |------------------|-------------------------------------------|
@@ -505,55 +700,55 @@ A `QDialog` with a `QTabWidget` containing five tabs of HTML content:
 | Strategies       | 7 named tactical tips                     |
 | Example Scenarios| 3 annotated worked examples               |
 
-Each tab is a `QTextBrowser` rendering the HTML string. Opened when the user clicks "How to Play" in `DeckCasinoView`.
+Each tab is a `QTextBrowser` rendering the HTML string. Opened when the user clicks "How to Play" in `DeckCasinoView` via [`_on_how_to_clicked()`](view/deck_casino_view.py#L290).
 
 ---
 
-### 5.6 `DrawnAssets`
+### 5.8 `DrawnAssets`
 **File:** [view/drawn_assets.py](view/drawn_assets.py)
 
 A module of shared QPainter-drawn UI components. Nothing in here uses image files.
 
-#### `make_window_icon(size=64) → QPixmap`
+#### [`make_window_icon(size=64)`](view/drawn_assets.py#L33) `→ QPixmap`
 Draws the application window icon: a dark-green rounded square with a gold border ring and all four suit symbols (♠♥♣♦) in their respective quadrants. Used by `MainWindow` to set the window icon.
 
-#### `make_history_icon(kind, size=20) → QPixmap`
+#### [`make_history_icon(kind, size=20)`](view/drawn_assets.py#L79) `→ QPixmap`
 Returns a small icon for move-history rows:
 - `"take"` — green down-arrow (cards captured)
 - `"place"` — blue up-arrow (card placed)
 - `"sweep"` — gold 4-point star
 
-#### `AvatarWidget`
+#### [`AvatarWidget`](view/drawn_assets.py#L169)
 Circular badge (default 26 px diameter) showing the first letter of a player's name. Background colour is chosen deterministically from the name hash using an 8-colour palette, so the same player always gets the same colour.
 
-#### `SweepFlashOverlay`
+#### [`SweepFlashOverlay`](view/drawn_assets.py#L202)
 Full-widget translucent overlay that announces a sweep. Placed as a child of `DeckCasinoView`; mouse-transparent so it never blocks interaction.
 
-- **`flash(player_name, hint_text="")`** — fades in to 90% opacity, holds for 1.2 s (1.6 s if hint text is present), then fades out over 480 ms.
+- **[`flash(player_name, hint_text="")`](view/drawn_assets.py#L239)** — fades in to 90% opacity, holds for 1.2 s (1.6 s if hint text is present), then fades out over 480 ms.
 - Draws a dark dim layer, a gold radial glow, a large "SWEEP!" headline, the player name, and (in hint mode) an explanatory subtitle.
 
-#### `RoundResultOverlay`
-Dark-themed modal `QDialog` displayed after each round or at game end. Shows players ranked by score with a medal indicator (1st / 2nd / 3rd) and a "Continue" or "New Game" button. Used by `MainWindow._after_deck_casino_action()`.
+#### [`RoundResultOverlay`](view/drawn_assets.py#L329)
+Dark-themed modal `QDialog` displayed after each round or at game end. Shows players ranked by score with a medal indicator (1st / 2nd / 3rd) and a "Continue" or "New Game" button. Used by [`_after_deck_casino_action()`](view/main_window.py#L560).
 
-#### `PointToastOverlay`
+#### [`PointToastOverlay`](view/drawn_assets.py#L498)
 Small non-blocking animated banner that slides in near the top of the game view to announce a notable card capture (Ace, Diamond-10, Spade-2). Fades out automatically (1.8 s without subtitle, 2.8 s with subtitle). Mouse-transparent.
 
-- **`show_event(title, subtitle="", accent="#ffd700")`** — positions itself relative to its parent, fades in, and starts the hold timer.
+- **[`show_event(title, subtitle="", accent="#ffd700")`](view/drawn_assets.py#L539)** — positions itself relative to its parent, fades in, and starts the hold timer.
 
 ---
 
-### 5.7 `PlayerBadgeWidget`
+### 5.9 `PlayerBadgeWidget`
 **File:** [view/player_badge_widget.py](view/player_badge_widget.py)
 
-A QPainter-drawn widget (34 px tall) representing one player in the score row of `DeckCasinoView`. Replaces simple `QLabel`s with a richer visual.
+[`PlayerBadgeWidget`](view/player_badge_widget.py#L37) is a QPainter-drawn widget (34 px tall) representing one player in the score row of `DeckCasinoView`. Replaces simple `QLabel`s with a richer visual.
 
 **Layout (left → right):**
 `[padding] [avatar circle] [⚙ CPU pill?] [name: X pts (+pending) (N sweeps)] ... [EASY|MED|HARD pill?] [padding]`
 
-- The **avatar circle** shows the player's initial letter with a colour derived from the name hash.
-- The **"⚙ CPU" pill** (blue-grey) and **difficulty pill** (green/amber/red) are only drawn for AI players.
+- The **avatar circle** — drawn by [`_draw_avatar()`](view/player_badge_widget.py#L127) — shows the player's initial letter with a colour derived from the name hash.
+- The **"⚙ CPU" pill** — drawn by [`_draw_cpu_badge()`](view/player_badge_widget.py#L144) — and **difficulty pill** — drawn by [`_draw_difficulty_pill()`](view/player_badge_widget.py#L160) — are only drawn for AI players.
 - The **active player** gets a brighter background and a gold left accent bar.
-- **`pending_pts`** — projected points to be awarded at round end, shown in light green after the score. Computed from the player's current collection and passed in at construction time.
+- **`pending_pts`** — projected points to be awarded at round end, shown in light green after the score. Computed by [`DeckCasinoView._pending_points()`](view/deck_casino_view.py#L208) and passed in at construction time.
 - **`is_current`** — `True` for the player whose turn it is.
 
 ---
@@ -569,7 +764,7 @@ window.show()
 sys.exit(app.exec())
 ```
 
-Creates the Qt application, instantiates `MainWindow` (which builds the full UI and wires all signals), shows the window, and starts the Qt event loop.
+Creates the Qt application, instantiates [`MainWindow`](view/main_window.py#L322) (which builds the full UI and wires all signals), shows the window, and starts the Qt event loop.
 
 ---
 
@@ -579,52 +774,48 @@ Here is what happens end-to-end when a player selects a hand card, selects two t
 
 ```
 User clicks hand card
-  └── CardWidget.mousePressEvent()
+  └── CardWidget.mousePressEvent()          view/card_widget.py:65
         └── CardWidget.clicked signal
-              └── DeckCasinoView._on_hand_card_clicked(card, widget)
+              └── DeckCasinoView._on_hand_card_clicked()   view/deck_casino_view.py:293
                     ├── stores card in _selected_hand_card
                     ├── highlights widget
-                    └── calls _update_buttons()  [enables Place Card]
+                    └── calls _update_buttons()             view/deck_casino_view.py:332
 
 User clicks two table cards
-  └── DeckCasinoView._on_table_card_clicked()  (called twice)
+  └── DeckCasinoView._on_table_card_clicked()   view/deck_casino_view.py:310  (called twice)
         ├── adds cards to _selected_table_cards
-        └── calls _update_buttons()  [enables Take Cards]
+        └── calls _update_buttons()
 
 User clicks "Take Cards"
-  └── DeckCasinoView._on_take_clicked()
+  └── DeckCasinoView._on_take_clicked()          view/deck_casino_view.py:321
         └── emits take_requested(hand_card, frozenset({table_card1, table_card2}))
 
-MainWindow._on_deck_casino_take(card, take)
+MainWindow._on_deck_casino_take(card, take)      view/main_window.py:533
   ├── records table_before and sweeps_before snapshots
-  ├── DeckCasinoGame.play_card(card, take)
-  │     ├── CasinoTakeAlgorithm.is_valid_take()  [validates the take]
+  ├── DeckCasinoGame.play_card(card, take)        model/deck_casino_game.py:47
+  │     ├── CasinoTakeAlgorithm.is_valid_take()   model/casino_take_algorithm.py:37
   │     ├── removes table cards from _table_cards
   │     ├── player.add_to_collection([card] + [table_card1, table_card2])
   │     ├── records _last_taker
-  │     ├── check_sweep()  [awards sweep if table is empty]
+  │     ├── check_sweep()                          model/deck_casino_game.py:84
   │     ├── draws one card from stock into player.hand
-  │     └── advance_turn()
-  ├── FileManager.record_move()  [builds move record with advice tip]
-  └── _show_capture_events()
-        ├── if sweep: deck_casino_view.show_sweep_flash(player_name, hint_text)
-        └── if Ace/D10/S2: deck_casino_view.show_point_toast(title, subtitle, accent)
+  │     └── advance_turn()                         model/deck_casino_game.py:89
+  ├── FileManager.record_move()                    model/file_manager.py:180
+  └── _show_capture_events()                       view/main_window.py:482
+        ├── if sweep: deck_casino_view.show_sweep_flash()   view/deck_casino_view.py:190
+        └── if Ace/D10/S2: deck_casino_view.show_point_toast()   view/deck_casino_view.py:194
 
-MainWindow._after_deck_casino_action()
+MainWindow._after_deck_casino_action()             view/main_window.py:560
   ├── [AI auto-play loop]
   │     while not round_over and current_player.is_ai:
-  │       AIOpponent.decide_action(game, difficulty) → (card, take)
+  │       AIOpponent.decide_action(game, difficulty)   model/ai_opponent.py:20
   │       game.play_card(card, take)
   │       _show_capture_events()
-  ├── checks game.is_round_over()
-  │     └── if True: calls game.end_round() → calculate_scores()
-  │           └── RoundResultOverlay(players, is_game_over).exec()
+  ├── checks game.is_round_over()                  model/deck_casino_game.py:95
+  │     └── if True: calls game.end_round()         model/deck_casino_game.py:101
+  │           └── RoundResultOverlay(...).exec()    view/drawn_assets.py:329
   │                 └── if has_winner(): switch_view(LOBBY), return
-  │                     else: game.start_game()  (new round)
-  ├── deck_casino_view.refresh(game)
-  │     ├── rebuilds PlayerBadgeWidget score row (with pending_pts)
-  │     ├── rebuilds table card widgets
-  │     ├── rebuilds hand card widgets (the next player's hand)
-  │     └── resets all selection state
-  └── FileManager.save(game, move_history)  [persists full state to save_data.json]
+  │                     else: game.start_game()     model/deck_casino_game.py:33
+  ├── deck_casino_view.refresh(game)                view/deck_casino_view.py:165
+  └── FileManager.save(game, move_history, player_names)   model/file_manager.py:81
 ```

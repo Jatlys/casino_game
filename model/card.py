@@ -33,10 +33,12 @@ class Card:
 
     @property
     def suit(self) -> str:
+        """The card's suit (Hearts, Diamonds, Clubs, or Spades)."""
         return self._suit
 
     @property
     def rank(self) -> str:
+        """The card's rank (2–10, J, Q, K, or A)."""
         return self._rank
 
     # Value methods

@@ -20,6 +20,7 @@ class Deck:
 
     @property
     def cards(self) -> list[Card]:
+        """Return a copy of the remaining cards in draw order (last element = top)."""
         return list(self._cards)
 
     @property

@@ -1,59 +1,96 @@
 # Y2_2026_83758_casino_game
 
-## UML Diagrams
-[Link to .xml file UML diagram visualiser](https://gitmanager.cs.aalto.fi/static/CS-A1121_2026Autumn/_static/mxgraph_mini/javascript/examples/grapheditor/www/index.html)
+A multi-game casino suite built with Python and PyQt6, developed for Aalto University CS-A1123 Basics in Programming Y2 (Spring 2026).
 
+## Games
 
-## Description
-A comprehensive casino card game application featuring multiple classic card games including Kasino Korttipeli, Blackjack, and Baccarat. This project implements a full GUI application with AI opponents, betting systems, and game state persistence.
+### Deck Casino (Kasino Korttipeli)
+Finnish card-taking game. Players capture table cards by playing a hand card whose **hand value** matches the sum of one or more table card groups. Three special cards carry bonus values:
 
-The application provides an interactive gaming experience with three main card games:
+| Card | Hand value | Table value | End-of-round point |
+|------|-----------|------------|-------------------|
+| Ace | 14 | 1 | +1 pt each |
+| Diamond 10 | 16 | 10 | +2 pts |
+| Spade 2 | 15 | 2 | +1 pt |
 
-- **Deck Casino (Kasino Korttipeli)**: A trick-taking card game where players capture cards from the table by matching ranks or building combinations
-- **Blackjack**: The classic card game where players aim to get as close to 21 as possible without going over
-- **Baccarat**: A comparing card game between the player's hand (Punto) and the banker's hand (Banco)
+**Scoring** (first to 16 points wins):
+- Each sweep (clearing the table): +1 pt
+- Each Ace collected: +1 pt
+- Most cards: +1 pt (no tie award)
+- Most Spades: +2 pts (no tie award)
+- Diamond 10 holder: +2 pts
+- Spade 2 holder: +1 pt
 
-Key features include:
-- Graphical user interface built with PyQt6
-- AI opponents with configurable difficulty levels
-- Betting system with bankroll management
-- Game state saving and loading
-- Session statistics tracking
-- Multiple player support
+Supports 2–4 players (human or AI). AI difficulty: Easy / Medium / Hard.
 
-## Visuals
-The application includes several views:
-- Lobby view for game selection and player setup
-- Individual game views with card animations and interactive elements
-- Score displays and betting interfaces
+### Blackjack
+Standard Blackjack against an AI dealer. Supports Hit, Stand, Double Down, and Split. Payouts: natural 2.5×, win 2×, push returns stake. Basic-strategy reference table is built into the AI dealer.
+
+### Baccarat (Punto Banco)
+Fully deterministic — no decisions after betting. Bet on Punto (1:1), Banco (1:1 minus 5% commission), or Tie (8:1). Third-card rules applied automatically.
 
 ## Installation
-### Prerequisites
-- Python 3.10 or higher
-- PyQt6 for the GUI components
 
-### Setup
-1. Clone the repository
-2. Install dependencies:
-   ```bash
-   pip install PyQt6
-   ```
-3. Run the application:
-   ```bash
-   python main.py
-   ```
+**Requires Python 3.10+ and PyQt6.**
 
-## Usage
-1. Launch the application
-2. Select a game from the lobby
-3. Configure players (human or AI)
-4. Set betting parameters if applicable
-5. Play the game following the on-screen instructions
+```bash
+pip install PyQt6
+python main.py
+```
 
-### Game Rules
-- **Deck Casino (Kasino Korttipeli)**: Players take turns playing cards and capturing combinations from the table
-- **Blackjack**: Hit, stand, double down, or split to beat the dealer
-- **Baccarat**: Bet on Punto, Banco, or Tie and watch the automated dealing
+No other dependencies are needed. All card art is drawn with QPainter — no image files required.
 
-## Authors and acknowledgment
-Project developed for Aalto University CS-A1123 Basics in Programming Y2 course, Spring 2026.
+## Running Tests
+
+```bash
+python -m pytest tests/ -v          # 242 tests
+python -m pytest tests/deck_casino_tests/ -v   # Deck Casino only
+```
+
+## Features
+
+- **AI opponents** — three difficulty levels for Deck Casino; basic-strategy dealer for Blackjack
+- **Save / Load** — full mid-round game state persisted to JSON; save file keyed by player roster so multiple groups can have separate saves
+- **Bankroll persistence** — bankroll carries across Blackjack and Baccarat sessions (`bankrolls.json`)
+- **Move history** — every action recorded with an auto-generated improvement tip; reviewable in the History panel
+- **Hint mode** — toggle hand-value badges on cards during Deck Casino
+- **Tutorial overlay** — step-by-step in-game guide for new players
+- **Card animations** — deal fade-in and flip animations via QTimer
+
+## Project Structure
+
+```
+main.py                  # entry point
+model/                   # pure game logic (no PyQt6)
+  card.py                # dual hand/table value design
+  deck.py                # 52-card draw pile
+  hand.py                # card aggregator
+  player.py              # participant state across all games
+  casino_take_algorithm.py  # subset-sum validator (recursive backtracking)
+  deck_casino_game.py    # Deck Casino game loop
+  blackjack_game.py      # Blackjack + AIDealer
+  baccarat_game.py       # Punto Banco Baccarat
+  ai_opponent.py         # 3-difficulty AI for Deck Casino
+  betting_system.py      # payout calculator
+  file_manager.py        # JSON save/load + move history
+controller/
+  game_manager.py        # thin game registry
+view/                    # PyQt6 GUI (no game logic)
+  main_window.py         # application shell + signal wiring
+  lobby_view.py          # game selection screen
+  deck_casino_view.py    # Deck Casino table
+  blackjack_view.py      # Blackjack betting/play interface
+  baccarat_view.py       # Punto vs Banco layout
+  card_widget.py         # QPainter card rendering
+  drawn_assets.py        # shared overlays, chip widget, avatar
+  game_history_view.py   # move history panel
+tests/                   # 242 unit tests (pytest)
+```
+
+## UML Diagrams
+
+[Open diagram in mxGraph editor](https://gitmanager.cs.aalto.fi/static/CS-A1121_2026Autumn/_static/mxgraph_mini/javascript/examples/grapheditor/www/index.html)
+
+## Authors
+
+Developed by Jatlyson Ang for Aalto University CS-A1123 Basics in Programming Y2, Spring 2026.

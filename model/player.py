@@ -26,30 +26,37 @@ class Player:
 
     @property
     def name(self) -> str:
+        """Display name of this player."""
         return self._name
 
     @property
     def is_ai(self) -> bool:
+        """True if this player is controlled by AIOpponent."""
         return self._is_ai
 
     @property
     def difficulty(self) -> str:
+        """AI difficulty level: "easy", "medium", or "hard"."""
         return self._difficulty
 
     @property
     def total_score(self) -> int:
+        """Cumulative Deck Casino score across all rounds."""
         return self._total_score
 
     @property
     def sweeps(self) -> int:
+        """Number of sweeps scored in the current round."""
         return self._sweeps
 
     @property
     def collection(self) -> list[Card]:
+        """Return a copy of all cards collected this round."""
         return list(self._collection)
 
     @property
     def bankroll(self) -> int:
+        """Current bankroll used for Blackjack and Baccarat bets."""
         return self._bankroll
 
     # Bankroll management (Blackjack / Baccarat)

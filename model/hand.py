@@ -16,10 +16,12 @@ class Hand:
 
     @property
     def cards(self) -> list[Card]:
+        """Return a copy of the cards currently in this hand."""
         return list(self._cards)
 
     @property
     def owner(self) -> str:
+        """Name of the player who holds this hand."""
         return self._owner
 
     # Mutation methods

@@ -105,30 +105,37 @@ class BlackjackGame:
 
     @property
     def player(self) -> Player:
+        """The human player in this round."""
         return self._player
 
     @property
     def dealer_hand(self) -> Hand:
+        """The dealer's current hand."""
         return self._dealer_hand
 
     @property
     def hands(self) -> list[Hand]:
+        """All active player hands (length > 1 after a split)."""
         return list(self._hands)
 
     @property
     def bets(self) -> list[int]:
+        """Bet amount for each hand, parallel to hands."""
         return list(self._bets)
 
     @property
     def current_hand(self) -> Hand:
+        """The hand currently being played."""
         return self._hands[self._current_hand_index]
 
     @property
     def current_hand_index(self) -> int:
+        """Index of the hand currently being played."""
         return self._current_hand_index
 
     @property
     def phase(self) -> str:
+        """Current game phase: "betting" | "player" | "dealer" | "done"."""
         return self._phase
 
     # ------------------------------------------------------------------

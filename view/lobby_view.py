@@ -35,6 +35,7 @@ class GameBannerWidget(QWidget):
     # Paint event
 
     def paintEvent(self, event) -> None:
+        """Draw the coloured header, card-fan illustration, and text for this banner."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 

@@ -64,6 +64,7 @@ class _HistoryRow(QWidget):
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
     def paintEvent(self, _event) -> None:
+        """Render the history row with game badge, player avatar, result, and delta."""
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         w, h = self.width(), self._ROW_H
@@ -141,6 +142,7 @@ class _HeaderBanner(QWidget):
         self.setFixedHeight(56)
 
     def paintEvent(self, _event) -> None:
+        """Draw the "Game History" header gradient banner."""
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         w, h = self.width(), self.height()
@@ -254,6 +256,7 @@ class GameHistoryView(QWidget):
         self._list_layout.insertWidget(0, self._empty_lbl)
 
     def paintEvent(self, _event) -> None:
+        """Fill the history panel background with a near-black colour."""
         p = QPainter(self)
         p.fillRect(self.rect(), QColor("#0d0d0d"))
 
@@ -290,6 +293,7 @@ class GameHistoryView(QWidget):
         self._update_count()
 
     def entry_count(self) -> int:
+        """Return the number of rounds recorded in the history."""
         return len(self._entries)
 
     # ── Internal helpers ───────────────────────────────────────────────

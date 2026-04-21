@@ -6,6 +6,7 @@ from view.main_window import MainWindow
 
 
 def main() -> None:
+    """Launch the casino game suite: create the Qt application and show the main window."""
     app = QApplication(sys.argv)    # Initialise the Qt application
     window = MainWindow()
     window.show()

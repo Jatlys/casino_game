@@ -183,6 +183,7 @@ class AvatarWidget(QWidget):
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
     def paintEvent(self, _event) -> None:
+        """Draw the circular avatar with the player's initial letter."""
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         d = min(self.width(), self.height())
@@ -236,6 +237,7 @@ class ChipWidget(QWidget):
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
     def paintEvent(self, _event) -> None:
+        """Draw the chip face with its denomination value."""
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         d = self._diameter
@@ -350,9 +352,11 @@ class SweepFlashOverlay(QWidget):
             self.setGeometry(self.parent().rect())  # type: ignore[union-attr]
 
     def resizeEvent(self, _event) -> None:
+        """Resize the overlay to always fill the parent widget."""
         self._fit_to_parent()
 
     def paintEvent(self, _event) -> None:
+        """Draw the dimmed backdrop and "SWEEP!" announcement text."""
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         w, h = self.width(), self.height()
@@ -485,6 +489,7 @@ class _PaintedBanner(QWidget):
         self.setFixedHeight(72)
 
     def paintEvent(self, _event) -> None:
+        """Draw the gradient header banner with the round/game-over title."""
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         w, h = self.width(), self.height()
@@ -517,6 +522,7 @@ class _ScoreRow(QWidget):
         self.setFixedHeight(38)
 
     def paintEvent(self, _event) -> None:
+        """Draw the score row with rank, player name, sweep stars, and point total."""
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         w, h = self.width(), self.height()
@@ -653,9 +659,11 @@ class PointToastOverlay(QWidget):
             self.setGeometry(x, y, width, height)
 
     def resizeEvent(self, _event) -> None:
+        """Reposition the toast banner when the parent widget is resized."""
         self._fit_to_parent()
 
     def paintEvent(self, _event) -> None:
+        """Draw the toast background, accent stripe, title, and subtitle text."""
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         w, h = self.width(), self.height()

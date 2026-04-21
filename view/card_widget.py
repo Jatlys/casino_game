@@ -110,11 +110,13 @@ class CardWidget(QWidget):
     # Events
 
     def mousePressEvent(self, event) -> None:
+        """Emit the clicked signal when the user presses the card."""
         self.clicked.emit()
 
     # Paint event
 
     def paintEvent(self, event) -> None:
+        """Render the card face, back, or placeholder slot with QPainter."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 

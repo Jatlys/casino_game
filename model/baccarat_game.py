@@ -60,22 +60,27 @@ class BaccaratGame:
 
     @property
     def punto_hand(self) -> Hand:
+        """Punto's current hand."""
         return self._punto_hand
 
     @property
     def banco_hand(self) -> Hand:
+        """Banco's current hand."""
         return self._banco_hand
 
     @property
     def natural(self) -> bool:
+        """True if either side scored a natural (8 or 9) on the first two cards."""
         return self._natural
 
     @property
     def phase(self) -> str:
+        """Current game phase: "betting" | "drawing" | "done"."""
         return self._phase
 
     @property
     def player(self) -> Player:
+        """The player placing bets in this round."""
         return self._player
 
     # ------------------------------------------------------------------
@@ -83,9 +88,11 @@ class BaccaratGame:
     # ------------------------------------------------------------------
 
     def punto_total(self) -> int:
+        """Return Punto's current Baccarat total (sum of card values mod 10)."""
         return _baccarat_hand_total(self._punto_hand)
 
     def banco_total(self) -> int:
+        """Return Banco's current Baccarat total (sum of card values mod 10)."""
         return _baccarat_hand_total(self._banco_hand)
 
     # ------------------------------------------------------------------

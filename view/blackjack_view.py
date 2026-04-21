@@ -69,12 +69,14 @@ class BettingPanel(QWidget):
         self._spin.setValue(new_val)
 
     def update_max(self, bankroll: int) -> None:
+        """Clamp the spin box maximum to the player's current bankroll."""
         m = max(1, bankroll)
         self._spin.setMaximum(m)
         if self._spin.value() > m:
             self._spin.setValue(m)
 
     def set_enabled(self, enabled: bool) -> None:
+        """Enable or disable the spin box and confirm button together."""
         self._spin.setEnabled(enabled)
         self._btn.setEnabled(enabled)
 
@@ -191,6 +193,7 @@ class BlackjackView(QWidget):
         layout.addLayout(bottom_row)
 
     def paintEvent(self, event) -> None:
+        """Draw the dark felt background for the Blackjack view."""
         painter = QPainter(self)
         painter.fillRect(self.rect(), QColor("#1a3a1a"))
 
@@ -202,6 +205,7 @@ class BlackjackView(QWidget):
         return self._game.player.bankroll if self._game else 0
 
     def set_game(self, game: BlackjackGame) -> None:
+        """Attach a BlackjackGame instance and reset the view to the betting phase."""
         self._game = game
         self._settled = False
         self._bankroll_before = game.player.bankroll
@@ -300,6 +304,7 @@ class BlackjackView(QWidget):
         self.round_finished.emit(result_str, delta, detail)
 
     def refresh(self) -> None:
+        """Rebuild dealer/player card zones and button states from the current game phase."""
         if self._game is None:
             return
         game = self._game

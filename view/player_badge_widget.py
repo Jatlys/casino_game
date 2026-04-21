@@ -59,6 +59,7 @@ class PlayerBadgeWidget(QWidget):
     # ------------------------------------------------------------------
 
     def paintEvent(self, event) -> None:
+        """Draw the badge background, avatar circle, name, score, and AI pills."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 

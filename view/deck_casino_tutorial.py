@@ -103,6 +103,7 @@ class _StepDots(QWidget):
         self.update()
 
     def paintEvent(self, event) -> None:
+        """Draw the step-progress dots for the tutorial overlay."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 

@@ -23,6 +23,7 @@ class TableZoneWidget(QWidget):
         self.setMinimumHeight(CARD_H + 48)
 
     def paintEvent(self, event) -> None:
+        """Draw the rounded green felt background and optional zone label."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 

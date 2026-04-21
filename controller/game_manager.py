@@ -18,10 +18,12 @@ class GameManager:
 
     @property
     def active_game(self):
+        """The currently running game instance, or None."""
         return self._active_game
 
     @property
     def players(self) -> list[Player]:
+        """Return a copy of the registered player roster."""
         return list(self._players)
 
     # Player management

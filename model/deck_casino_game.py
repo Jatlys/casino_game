@@ -151,18 +151,22 @@ class DeckCasinoGame:
 
     @property
     def current_player(self) -> Player:
+        """The player whose turn it is."""
         return self._players[self._turn_index]
 
     @property
     def table_cards(self) -> list[Card]:
+        """Return a copy of the cards currently on the table."""
         return list(self._table_cards)
 
     @property
     def players(self) -> list[Player]:
+        """Return a copy of the player list in turn order."""
         return list(self._players)
 
     @property
     def deck(self) -> Deck:
+        """The stock pile (draw deck) for the current round."""
         return self._deck
 
     # Dunder helpers

@@ -144,6 +144,7 @@ class BaccaratView(QWidget):
         layout.addLayout(bottom_row)
 
     def paintEvent(self, event) -> None:
+        """Draw the dark purple background that distinguishes Baccarat from other views."""
         painter = QPainter(self)
         painter.fillRect(self.rect(), QColor("#1a1a3a"))
 
@@ -155,6 +156,7 @@ class BaccaratView(QWidget):
         return self._game.player.bankroll if self._game else 0
 
     def set_game(self, game: BaccaratGame) -> None:
+        """Attach a BaccaratGame instance and reset the view to the betting phase."""
         self._game = game
         self._bankroll_before = game.player.bankroll
         self._bet_panel.update_max(game.player.bankroll)

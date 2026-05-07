@@ -2,8 +2,7 @@
 # Verifies that AI (hard difficulty) never leaves an obvious sweep for the
 # opponent and that full AI vs AI games complete without errors.
 #
-# Run with: python -m pytest tests/deck_casino_tests/test_week7_ai.py
-#       or: python -m unittest tests/deck_casino_tests/test_week7_ai.py
+# Run with: python -m unittest tests.deck_casino_tests.test_week7_ai
 
 import itertools
 import unittest

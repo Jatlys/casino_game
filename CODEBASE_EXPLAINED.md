@@ -455,7 +455,15 @@ Inner class (same file). Dealer hits on any total < 17 and stands on 17+.
 ### 3.11 `FileManager`
 **File:** [model/file_manager.py](model/file_manager.py)
 
-[`FileManager`](model/file_manager.py#L14) handles JSON serialization of the full Deck Casino game state and per-move history. All methods are `@staticmethod`. Save files are named per [`slot_filename(player_names)`](model/file_manager.py#L52) — keyed by the player roster so each lineup has its own file.
+[`FileManager`](model/file_manager.py#L14) handles JSON serialization of the full Deck Casino game state, per-move history, and cross-game bankroll persistence. All methods are `@staticmethod`. Save files are named per [`slot_filename(player_names)`](model/file_manager.py#L52) — keyed by the player roster so each lineup has its own file.
+
+#### Bankroll persistence (`bankrolls.json`)
+
+**[`load_bankroll(name)`](model/file_manager.py#L53) `→ int`** — returns the stored bankroll for `name` (exact, case-sensitive key lookup), or `Player.DEFAULT_BANKROLL` if not found or the file does not exist.
+
+**[`save_bankroll(name, amount)`](model/file_manager.py#L67)** — writes or updates the entry for `name` in `bankrolls.json`. All other players' entries are preserved.
+
+**[`find_case_insensitive_match(name)`](model/file_manager.py#L68) `→ str | None`** — scans `bankrolls.json` for a key that matches `name` case-insensitively. Returns `None` when there is an exact match (no action needed) or no match at all; returns the stored key only when capitalisation differs (e.g. stored `"alice"`, entered `"Alice"`). Used by `MainWindow._resolve_bankroll()` and `PlayerSetupDialog._resolve_bankroll()` to prompt the player before silently creating a duplicate entry.
 
 #### Save format
 ```json
@@ -595,9 +603,11 @@ Four views are registered at startup: `LobbyView`, `DeckCasinoView`, `BlackjackV
 5. Calls `deck_casino_view.refresh(game)` and switches to the game view.
 6. If tutorial was selected, calls `deck_casino_view.start_tutorial()`.
 
-**[`_launch_blackjack()`](view/main_window.py#L460)** — prompts for a player name via `QInputDialog`, instantiates `BlackjackGame(player)`, and passes it to `BlackjackView.set_game()` before switching to that view.
+**[`_resolve_bankroll(name)`](view/main_window.py#L493)** — shared helper used by both `_launch_blackjack()` and `_launch_baccarat()`. Calls `FileManager.find_case_insensitive_match(name)`: if a differently-cased existing entry is found (e.g. stored `"alice"`, entered `"Alice"`), shows a Yes/No `QMessageBox` asking whether to load that balance. Returns the matched amount on Yes, or falls back to `FileManager.load_bankroll(name)` on No or no match.
 
-**[`_launch_baccarat()`](view/main_window.py#L469)** — same pattern: prompts for a name, instantiates `BaccaratGame(player)`, passes it to `BaccaratView.set_game()`.
+**[`_launch_blackjack()`](view/main_window.py#L507)** — prompts for a player name via `QInputDialog`, resolves the bankroll with `_resolve_bankroll()`, instantiates `BlackjackGame(player)`, and passes it to `BlackjackView.set_game()` before switching to that view.
+
+**[`_launch_baccarat()`](view/main_window.py#L529)** — same pattern: prompts for a name, resolves the bankroll with `_resolve_bankroll()`, instantiates `BaccaratGame(player)`, passes it to `BaccaratView.set_game()`.
 
 **Deck Casino action handlers:**
 - [`_on_deck_casino_take(card, take)`](view/main_window.py#L533) → records `table_before`, calls `game.play_card(card, take)`; shows a warning on `ValueError`; appends a move record; calls `_show_capture_events()`; calls `_after_deck_casino_action()`.
@@ -609,7 +619,7 @@ Four views are registered at startup: `LobbyView`, `DeckCasinoView`, `BlackjackV
 - Aces, Diamond-10, or Spade-2 in the take → calls `show_point_toast()` with a descriptive title. Hint mode adds an explanatory subtitle.
 
 **Dialogs defined here:**
-- [`PlayerSetupDialog`](view/main_window.py#L26) — two-mode form (PvP / PvC) with difficulty selection for AI.
+- [`PlayerSetupDialog`](view/main_window.py#L26) — two-mode form (PvP / PvC) with difficulty selection for AI. Contains its own `_resolve_bankroll(name)` helper (same logic as `MainWindow._resolve_bankroll`) used when building the `Player` list in `get_players()`.
 - [`TutorialModeDialog`](view/main_window.py#L253) — Yes/No prompt for tutorial.
 - [`SidebarWidget`](view/main_window.py#L289) — shows player name and score.
 

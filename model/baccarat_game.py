@@ -238,6 +238,8 @@ class BaccaratGame:
         Args:
             banco_total:  Banco's current 2-card total.
             punto_third:  Punto's third card value (0-9), or None if Punto stood.
+
+        Source: https://en.wikipedia.org/wiki/Baccarat#Third-card_rule
         """
         if punto_third is None:
             return banco_total <= 5

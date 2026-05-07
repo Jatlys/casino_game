@@ -21,6 +21,7 @@ class AIDealer:
 
     # Hard-total basic-strategy table. Keys: (player_total, dealer_upcard_value).
     # Soft totals and pairs are out of scope; out-of-table queries default to "stand".
+    # Source: Thorp (1962) Beat the Dealer; https://www.blackjackapprenticeship.com/blackjack-strategy-charts/
     _HARD_STRATEGY: dict[tuple[int, int], str] = {}
 
     @classmethod

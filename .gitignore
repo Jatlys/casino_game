@@ -1,0 +1,12 @@
+/gitlab_issues.md
+/drawings.md
+/PyQt6 Examples
+
+
+# ignore all caches from running application
+*.pyc
+*.pyo
+
+# ignore saved game data
+bankrolls.json
+save_data.json

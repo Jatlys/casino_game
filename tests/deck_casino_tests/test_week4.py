@@ -1,6 +1,5 @@
 # Unit tests for Week 4: AIOpponent and FileManager.
-# Run with: python -m pytest tests/deck_casino_tests/test_week4.py
-#       or: python -m unittest tests/deck_casino_tests/test_week4.py
+# Run with: python -m unittest tests.deck_casino_tests.test_week4
 
 import os
 import unittest

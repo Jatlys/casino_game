@@ -27,6 +27,7 @@ class FileManager:
           "difficulty": str,
           "total_score": int,
           "sweeps": int,
+          "bankroll": int,
           "hand":       [ {"suit": ..., "rank": ...}, ... ],
           "collection": [ {"suit": ..., "rank": ...}, ... ]
         },
@@ -63,6 +64,27 @@ class FileManager:
         with open(path, encoding="utf-8") as fh:
             data: dict = json.load(fh)
         return data.get(name, Player.DEFAULT_BANKROLL)
+
+    @staticmethod
+    def find_case_insensitive_match(name: str) -> "str | None":
+        """Return an existing bankroll key that matches *name* case-insensitively.
+
+        Returns None when there is an exact match (no prompt needed) or no
+        match at all.  Only returns a value when the name differs solely in
+        capitalisation from a stored entry.
+        """
+        path = os.path.join(SAVE_DIR, BANKROLL_FILE)
+        if not os.path.exists(path):
+            return None
+        with open(path, encoding="utf-8") as fh:
+            data: dict = json.load(fh)
+        if name in data:
+            return None  # exact match — no ambiguity
+        name_lower = name.lower()
+        for key in data:
+            if key.lower() == name_lower:
+                return key
+        return None
 
     @staticmethod
     def save_bankroll(name: str, amount: int) -> None:

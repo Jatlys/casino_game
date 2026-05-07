@@ -29,11 +29,12 @@ from view.drawn_assets import AvatarWidget
 @dataclass
 class HistoryEntry:
     """One row in the game history list."""
-    game:   str          # "Deck Casino" | "Blackjack" | "Baccarat"
-    player: str          # player name
-    result: str          # "win" | "loss" | "draw" | "1st" / "2nd" / …
-    delta:  int          # score / bankroll change (signed)
-    detail: str = ""     # optional free-text note
+    game:           str       # "Deck Casino" | "Blackjack" | "Baccarat"
+    player:         str       # player name
+    result:         str       # "win" | "loss" | "draw" | "1st" / "2nd" / …
+    delta:          int       # score / bankroll change (signed)
+    detail:         str = ""  # optional free-text note
+    bankroll_after: int | None = None  # bankroll after the round (Blackjack / Baccarat)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -55,7 +56,7 @@ _GAME_BADGE_COLORS = {
 class _HistoryRow(QWidget):
     """QPainter-drawn row for one HistoryEntry."""
 
-    _ROW_H = 54
+    _ROW_H = 64
 
     def __init__(self, entry: HistoryEntry, parent=None) -> None:
         super().__init__(parent)
@@ -103,29 +104,48 @@ class _HistoryRow(QWidget):
             p.setFont(QFont("Arial", 8))
             p.drawText(QRect(60, 28, w // 2, 20), Qt.AlignmentFlag.AlignVCenter, e.detail)
 
-        # Delta (right side, bold, coloured)
+        # ── Right side: result / delta / balance ──────────────────────
+        right_x = w // 2
+        right_w = w // 2 - 16
+
         delta_str = f"+{e.delta}" if e.delta > 0 else str(e.delta)
         delta_color = QColor("#4caf50") if e.delta > 0 else (
             QColor("#f44336") if e.delta < 0 else QColor("#9e9e9e")
         )
-        p.setPen(QPen(delta_color))
-        p.setFont(QFont("Arial", 13, QFont.Weight.Black))
-        p.drawText(
-            QRect(w // 2, 0, w // 2 - 16, h),
-            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
-            delta_str,
-        )
 
-        # Result label (right-aligned, small, above delta)
-        result_color = QColor(accent_hex)
-        p.setPen(QPen(result_color))
-        p.setFont(QFont("Arial", 8, QFont.Weight.Bold))
-        result_text = e.result.upper()
-        p.drawText(
-            QRect(w // 2, 6, w // 2 - 16, 16),
-            Qt.AlignmentFlag.AlignRight,
-            result_text,
-        )
+        if e.bankroll_after is not None:
+            # Three-line layout: result (top) / delta (middle) / balance (bottom)
+            result_color = QColor(accent_hex)
+            p.setPen(QPen(result_color))
+            p.setFont(QFont("Arial", 8, QFont.Weight.Bold))
+            p.drawText(QRect(right_x, 5, right_w, 14),
+                       Qt.AlignmentFlag.AlignRight, e.result.upper())
+
+            p.setPen(QPen(delta_color))
+            p.setFont(QFont("Arial", 13, QFont.Weight.Black))
+            p.drawText(QRect(right_x, 19, right_w, 22),
+                       Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+                       delta_str)
+
+            balance_str = f"Balance: ${e.bankroll_after:,}"
+            p.setPen(QPen(QColor("#aaaaaa")))
+            p.setFont(QFont("Arial", 8))
+            p.drawText(QRect(right_x, 44, right_w, 16),
+                       Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+                       balance_str)
+        else:
+            # Original two-line layout: result (top) / delta (vertically centred)
+            result_color = QColor(accent_hex)
+            p.setPen(QPen(result_color))
+            p.setFont(QFont("Arial", 8, QFont.Weight.Bold))
+            p.drawText(QRect(right_x, 6, right_w, 16),
+                       Qt.AlignmentFlag.AlignRight, e.result.upper())
+
+            p.setPen(QPen(delta_color))
+            p.setFont(QFont("Arial", 13, QFont.Weight.Black))
+            p.drawText(QRect(right_x, 0, right_w, h),
+                       Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
+                       delta_str)
 
         # Separator line at bottom
         p.setPen(QPen(QColor("#333333"), 1))
@@ -270,15 +290,13 @@ class GameHistoryView(QWidget):
             self._empty_lbl.hide()
 
         row = _HistoryRow(entry)
-        # Insert before the trailing stretch (last item)
-        self._list_layout.insertWidget(self._list_layout.count() - 1, row)
+        # Insert at index 1 (after the hidden empty-state label) so newest is at the top
+        self._list_layout.insertWidget(1, row)
 
         self._update_count()
-        # Scroll to bottom so the newest entry is visible
+        # Scroll to top so the newest entry is immediately visible
         QWidget.update(self._scroll)
-        self._scroll.verticalScrollBar().setValue(
-            self._scroll.verticalScrollBar().maximum()
-        )
+        self._scroll.verticalScrollBar().setValue(0)
 
     def clear(self) -> None:
         """Remove all history entries."""

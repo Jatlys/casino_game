@@ -19,9 +19,9 @@ class AIDealer:
     Dealer upcard is its numeric Blackjack value (Ace = 11).
     """
 
-    # Condensed basic-strategy hard-total table.
-    # Keys: (player_total, dealer_upcard_value)
-    # Only hard totals are listed; soft totals and pairs handled separately.
+    # Hard-total basic-strategy table. Keys: (player_total, dealer_upcard_value).
+    # Soft totals and pairs are out of scope; out-of-table queries default to "stand".
+    # Source: Thorp (1962) Beat the Dealer; https://www.blackjackapprenticeship.com/blackjack-strategy-charts/
     _HARD_STRATEGY: dict[tuple[int, int], str] = {}
 
     @classmethod

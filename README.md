@@ -43,8 +43,8 @@ No other dependencies are needed. All card art is drawn with QPainter — no ima
 ## Running Tests
 
 ```bash
-python -m pytest tests/ -v          # 242 tests
-python -m pytest tests/deck_casino_tests/ -v   # Deck Casino only
+python -m unittest discover tests/                              # 242 tests
+python -m unittest discover tests/deck_casino_tests/           # Deck Casino only
 ```
 
 ## Features
@@ -84,7 +84,7 @@ view/                    # PyQt6 GUI (no game logic)
   card_widget.py         # QPainter card rendering
   drawn_assets.py        # shared overlays, chip widget, avatar
   game_history_view.py   # move history panel
-tests/                   # 242 unit tests (pytest)
+tests/                   # 242 unit tests (unittest)
 ```
 
 ## UML Diagrams
@@ -94,3 +94,43 @@ tests/                   # 242 unit tests (pytest)
 ## Authors
 
 Developed by Jatlyson Ang for Aalto University CS-A1123 Basics in Programming Y2, Spring 2026.
+
+---
+
+## Project Plan vs. Final Implementation
+
+### What was planned and delivered
+
+Every core feature from the original project plan (submitted February 2026) was implemented.
+
+| Planned feature | Status |
+|---|---|
+| Finnish Deck Casino (Kasino-Kortipelli) with multi-player support, sweep detection, special card values, and full scoring | Delivered |
+| Blackjack with Hit, Stand, Double Down, and Split | Delivered |
+| Baccarat (Punto Banco) with Punto, Banco, and Tie bets; deterministic third-card rules | Delivered |
+| `CasinoTakeAlgorithm` — enumerate all valid takes for a played card | Delivered (see note below) |
+| `AIOpponent` with Easy / Medium / Hard difficulty using a 6-priority strategy | Delivered |
+| Full mid-round game state save/load to JSON | Delivered |
+| Bankroll persistence across Blackjack and Baccarat sessions | Delivered |
+| Game history view showing per-round result and bankroll change | Delivered |
+| MVC architecture: model has no PyQt6 imports; views contain no game logic | Delivered |
+| QPainter card rendering with no external image files | Delivered |
+| Card deal and flip animations via `QTimer` | Delivered |
+| Unit tests via `unittest` | Delivered — 242 tests (plan required at least 10) |
+
+### Implementation differences from the plan
+
+**`CasinoTakeAlgorithm` — recursive backtracking instead of `itertools`:** The plan described a straightforward `itertools.combinations` subset-sum search. The final implementation uses recursive backtracking (`_can_cover`) that validates multi-group takes: a single played card can capture several disjoint table groups each summing to the card's hand value. This handles rule cases the simpler approach cannot.
+
+**No abstract `Game` base class:** The plan defined an abstract `Game` superclass with `start_round`, `end_round`, and `get_valid_actions`. In practice, Deck Casino, Blackjack, and Baccarat have sufficiently different structures that a shared base class added little value. `GameManager` stays thin, and Blackjack and Baccarat are launched directly from `MainWindow` without routing through it.
+
+**Player-roster-keyed save slots:** The plan described a single `save_data.json`. The final implementation creates per-roster files (e.g. `save_Alice_Bob.json`) so that different groups of players can maintain independent mid-round saves simultaneously.
+
+### Additional features beyond the plan
+
+- **Tutorial overlay** — a step-by-step guided walkthrough of Deck Casino rules, shown as an overlay directly on the table for new players.
+- **Hint mode** — a toggle that displays each card's hand value as a badge, making the dual hand/table value system visible while learning.
+- **Move history with improvement tips** — every Deck Casino action is recorded with an auto-generated tip (e.g. missed sweep warnings, special card capture feedback), reviewable in the History panel.
+- **Visual overlays** — `SweepFlashOverlay`, `RoundResultOverlay`, and `PointToastOverlay` provide in-table feedback drawn with QPainter, with no external assets.
+- **Player badge widget** — a compact sidebar widget showing each player's name, score, and sweep count during Deck Casino, updating after every action.
+- **Bankroll case-insensitive name matching** — when a name is entered that matches an existing bankroll entry only by capitalisation (e.g. "alice" vs "Alice"), the player is prompted to choose whether to load that saved balance.

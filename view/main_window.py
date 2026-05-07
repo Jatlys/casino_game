@@ -234,6 +234,21 @@ class PlayerSetupDialog(QDialog):
     # Public API
     # ------------------------------------------------------------------
 
+    def _resolve_bankroll(self, name: str) -> int:
+        """Load bankroll for *name*, prompting if a differently-cased entry exists."""
+        existing_key = FileManager.find_case_insensitive_match(name)
+        if existing_key is not None:
+            amount = FileManager.load_bankroll(existing_key)
+            reply = QMessageBox.question(
+                self, "Existing Bankroll Found",
+                f"A saved bankroll was found for \"{existing_key}\" (${amount:,}).\n"
+                f"Do you want to use this bankroll for \"{name}\"?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                return amount
+        return FileManager.load_bankroll(name)
+
     def get_players(self) -> list[Player]:
         """Return a Player list ready to pass to DeckCasinoGame.
 
@@ -246,12 +261,12 @@ class PlayerSetupDialog(QDialog):
                 for e in self._pvp_name_edits
                 if e.text().strip()
             ]
-            return [Player(n, bankroll=FileManager.load_bankroll(n)) for n in names]
+            return [Player(n, bankroll=self._resolve_bankroll(n)) for n in names]
         else:
             human = self._human_name_edit.text().strip() or "Player 1"
             diff  = self._selected_difficulty()
             return [
-                Player(human, bankroll=FileManager.load_bankroll(human)),
+                Player(human, bankroll=self._resolve_bankroll(human)),
                 Player("Computer", is_ai=True, difficulty=diff),
             ]
 
@@ -331,7 +346,6 @@ class MainWindow(QMainWindow):
     """Application shell: persistent sidebar + QStackedWidget main area.
 
     Views are registered by name and switched via switch_view().
-    Blackjack and Baccarat views are added in Week 6.
     """
 
     # View name constants
@@ -475,6 +489,21 @@ class MainWindow(QMainWindow):
         if tutorial_mode:
             self._deck_casino_view.start_tutorial()
 
+    def _resolve_bankroll(self, name: str) -> int:
+        """Load bankroll for *name*, prompting if a differently-cased entry exists."""
+        existing_key = FileManager.find_case_insensitive_match(name)
+        if existing_key is not None:
+            amount = FileManager.load_bankroll(existing_key)
+            reply = QMessageBox.question(
+                self, "Existing Bankroll Found",
+                f"A saved bankroll was found for \"{existing_key}\" (${amount:,}).\n"
+                f"Do you want to use this bankroll for \"{name}\"?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                return amount
+        return FileManager.load_bankroll(name)
+
     def _launch_blackjack(self) -> None:
         name, ok = QInputDialog.getText(self, "Player Name", "Enter your name:")
         if not ok or not name.strip():
@@ -482,7 +511,7 @@ class MainWindow(QMainWindow):
         from model.blackjack_game import BlackjackGame
         pname = name.strip()
         # Load this player's saved bankroll — each name has its own balance
-        saved_bankroll = FileManager.load_bankroll(pname)
+        saved_bankroll = self._resolve_bankroll(pname)
         player = Player(pname, bankroll=saved_bankroll)
         self._blackjack_view.set_game(BlackjackGame(player))
         # Re-connect so the player name and bankroll saving are wired per session
@@ -499,10 +528,11 @@ class MainWindow(QMainWindow):
     def _on_blackjack_round_finished(self, player_name: str, result: str,
                                      delta: int, detail: str) -> None:
         """Save bankroll and record history after a Blackjack round."""
-        FileManager.save_bankroll(player_name, self._blackjack_view.current_bankroll)
+        bankroll = self._blackjack_view.current_bankroll
+        FileManager.save_bankroll(player_name, bankroll)
         self._history_view.add_entry(
             HistoryEntry(game="Blackjack", player=player_name, result=result,
-                         delta=delta, detail=detail)
+                         delta=delta, detail=detail, bankroll_after=bankroll)
         )
 
     def _launch_baccarat(self) -> None:
@@ -512,7 +542,7 @@ class MainWindow(QMainWindow):
         from model.baccarat_game import BaccaratGame
         pname = name.strip()
         # Load this player's saved bankroll — each name has its own balance
-        saved_bankroll = FileManager.load_bankroll(pname)
+        saved_bankroll = self._resolve_bankroll(pname)
         player = Player(pname, bankroll=saved_bankroll)
         self._baccarat_view.set_game(BaccaratGame(player))
         # Re-connect so the player name and bankroll saving are wired per session
@@ -529,10 +559,11 @@ class MainWindow(QMainWindow):
     def _on_baccarat_round_finished(self, player_name: str, result: str,
                                     delta: int, detail: str) -> None:
         """Save bankroll and record history after a Baccarat round."""
-        FileManager.save_bankroll(player_name, self._baccarat_view.current_bankroll)
+        bankroll = self._baccarat_view.current_bankroll
+        FileManager.save_bankroll(player_name, bankroll)
         self._history_view.add_entry(
             HistoryEntry(game="Baccarat", player=player_name, result=result,
-                         delta=delta, detail=detail)
+                         delta=delta, detail=detail, bankroll_after=bankroll)
         )
 
     # Deck Casino actions

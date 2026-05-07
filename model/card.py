@@ -1,5 +1,4 @@
-# Special card values (Ace=14/1, Diamond-10=16/10, Spade-2=15/2) defined in Finnish Kasino rules
-# See 104083758_casino_project_plan.pdf Section 6.
+# Special card values (Ace=14/1, Diamond-10=16/10, Spade-2=15/2) per Finnish Kasino rules.
 
 SUITS = ["Hearts", "Diamonds", "Clubs", "Spades"]
 RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]

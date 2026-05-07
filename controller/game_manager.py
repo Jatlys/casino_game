@@ -2,15 +2,13 @@ from model.player import Player
 
 
 class GameManager:
-    """Central controller for the casino suite.
+    """Thin controller holding the active DeckCasinoGame and player roster.
 
-    Holds a registry of available Game instances, tracks the active game,
-    and manages the player roster. Save/load and full game wiring are
-    implemented in later weeks.
+    Blackjack and Baccarat bypass this class entirely; they are launched
+    directly by MainWindow.
     """
 
     def __init__(self) -> None:
-        self._games: dict = {}
         self._active_game = None
         self._players: list[Player] = []
 

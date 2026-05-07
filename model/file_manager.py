@@ -27,6 +27,7 @@ class FileManager:
           "difficulty": str,
           "total_score": int,
           "sweeps": int,
+          "bankroll": int,
           "hand":       [ {"suit": ..., "rank": ...}, ... ],
           "collection": [ {"suit": ..., "rank": ...}, ... ]
         },

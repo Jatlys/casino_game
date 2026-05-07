@@ -1,4 +1,4 @@
-# Deck Casino table view — connected to DeckCasinoGame via signals (Week 3).
+# Deck Casino table view — connected to DeckCasinoGame via signals.
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,

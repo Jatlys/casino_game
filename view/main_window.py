@@ -346,7 +346,6 @@ class MainWindow(QMainWindow):
     """Application shell: persistent sidebar + QStackedWidget main area.
 
     Views are registered by name and switched via switch_view().
-    Blackjack and Baccarat views are added in Week 6.
     """
 
     # View name constants

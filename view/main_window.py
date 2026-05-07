@@ -528,10 +528,11 @@ class MainWindow(QMainWindow):
     def _on_blackjack_round_finished(self, player_name: str, result: str,
                                      delta: int, detail: str) -> None:
         """Save bankroll and record history after a Blackjack round."""
-        FileManager.save_bankroll(player_name, self._blackjack_view.current_bankroll)
+        bankroll = self._blackjack_view.current_bankroll
+        FileManager.save_bankroll(player_name, bankroll)
         self._history_view.add_entry(
             HistoryEntry(game="Blackjack", player=player_name, result=result,
-                         delta=delta, detail=detail)
+                         delta=delta, detail=detail, bankroll_after=bankroll)
         )
 
     def _launch_baccarat(self) -> None:
@@ -558,10 +559,11 @@ class MainWindow(QMainWindow):
     def _on_baccarat_round_finished(self, player_name: str, result: str,
                                     delta: int, detail: str) -> None:
         """Save bankroll and record history after a Baccarat round."""
-        FileManager.save_bankroll(player_name, self._baccarat_view.current_bankroll)
+        bankroll = self._baccarat_view.current_bankroll
+        FileManager.save_bankroll(player_name, bankroll)
         self._history_view.add_entry(
             HistoryEntry(game="Baccarat", player=player_name, result=result,
-                         delta=delta, detail=detail)
+                         delta=delta, detail=detail, bankroll_after=bankroll)
         )
 
     # Deck Casino actions

@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QLabel, QPushButton, QFrame,
 )
 from PyQt6.QtGui import QPainter, QColor, QFont, QPen, QBrush
-from PyQt6.QtCore import Qt, QRectF, pyqtSignal
+from PyQt6.QtCore import Qt, QRectF, QTimer, pyqtSignal
 
 from view.card_widget import CardWidget, CARD_H
 from view.player_badge_widget import PlayerBadgeWidget
